@@ -310,12 +310,6 @@ body {
   margin-bottom: 36px;
 }
 
-@media (max-width: 960px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .dash-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1246,4 +1240,317 @@ textarea.form-control {
 .db-action-pill.delete:hover {
   background: var(--danger-btn);
   color: #ffffff;
+}
+
+/* ================= MOBILE DESIGN OPTIMIZATIONS (≤ 768px) ================= */
+@media (max-width: 768px) {
+  /* Header & Navigation */
+  .app-header {
+    padding: 10px 14px;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    width: 100%;
+  }
+
+  .header-left {
+    z-index: 2;
+    min-width: 38px;
+  }
+
+  .back-btn {
+    padding: 6px 10px;
+    height: 34px;
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .header-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 1;
+    width: auto;
+  }
+
+  .header-node-title {
+    font-size: 19px;
+    font-weight: 800;
+  }
+
+  .header-node-subtitle {
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  .header-actions {
+    z-index: 2;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .server-switcher-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 16px;
+    max-width: 130px;
+  }
+
+  #activeServerName {
+    max-width: 75px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* Content Spacing */
+  .app-content {
+    padding: 14px 14px 40px 14px;
+  }
+
+  /* Health Status Banner */
+  .health-banner {
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+    gap: 10px;
+  }
+
+  .health-info {
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .health-icon-box {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+
+  .health-icon-box svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .health-text {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .health-text h3 {
+    font-size: 15px;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .health-url {
+    font-size: 11px;
+    word-break: break-all;
+    line-height: 1.35;
+    opacity: 0.85;
+  }
+
+  .health-refresh-btn {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    margin-left: 6px;
+  }
+
+  .section-heading {
+    font-size: 16px;
+    margin-bottom: 14px;
+    gap: 8px;
+  }
+
+  /* ================= 2-COLUMN COMPACT TILES (MATCHING REFERENCE APP) ================= */
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    margin-bottom: 24px;
+  }
+
+  .dash-card {
+    padding: 20px 12px !important;
+    min-height: 120px !important;
+    border-radius: 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  .dash-card > div:first-child {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .dash-card-header {
+    margin-bottom: 8px !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
+
+  .dash-icon-box {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 16px !important;
+  }
+
+  .dash-icon-box svg {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  .dash-card-tag {
+    display: none !important; /* Hide verbose desktop tag */
+  }
+
+  .dash-card-body {
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  .dash-card-body h3 {
+    font-size: 15px !important;
+    margin: 0 !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+  }
+
+  .dash-card-body p {
+    display: none !important; /* Hide verbose desktop paragraphs */
+  }
+
+  .dash-card-footer {
+    display: none !important; /* Hide desktop arrow link */
+  }
+
+  /* ================= SCRIPTS VIEW MOBILE ================= */
+  .scripts-pc-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .btn-script-toggle {
+    width: 100% !important;
+    min-width: unset !important;
+    height: 46px !important;
+    font-size: 15px !important;
+    margin-top: 10px;
+  }
+
+  .log-panel {
+    padding: 16px !important;
+    border-radius: 14px !important;
+  }
+
+  .log-terminal {
+    min-height: 220px !important;
+    max-height: 320px !important;
+    font-size: 12px !important;
+  }
+
+  /* ================= DATABASES VIEW MOBILE ================= */
+  .db-top-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px !important;
+  }
+
+  .db-top-bar > div:first-child {
+    width: 100%;
+  }
+
+  .db-top-bar > div:first-child .tab-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .db-selector-group {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  .db-selector-group select {
+    max-width: unset !important;
+    width: 100% !important;
+  }
+
+  .db-split-layout {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .db-tables-sidebar {
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .db-tables-items {
+    max-height: 180px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-table-item {
+    flex-shrink: 0 !important;
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+  }
+
+  .db-data-view-card {
+    padding: 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .db-data-table-scroll {
+    max-height: 380px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-data-grid th, .db-data-grid td {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* ================= MODALS MOBILE ================= */
+  .modal-overlay {
+    padding: 12px !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 85vh !important;
+    border-radius: 20px 20px 10px 10px !important;
+    padding: 22px 16px !important;
+  }
 }

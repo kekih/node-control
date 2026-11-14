@@ -186,9 +186,21 @@ func (sm *ScriptManager) GetScriptHistoryContent(id, fileName string) (string, e
 }
 
 // GetScript retrieves script code and metadata
-func (sm *ScriptManager) GetScript(id string) (string, string, string, error) {
+func (sm *ScriptManager) GetScript(id, reqLang string) (string, string, string, error) {
 	dir := sm.getScriptDir(id)
-	files := []string{"main.py", "main.js", "main.go"}
+
+	var files []string
+	switch strings.ToLower(reqLang) {
+	case "nodejs", "node", "javascript", "js":
+		files = []string{"main.js"}
+	case "golang", "go":
+		files = []string{"main.go"}
+	case "python", "py":
+		files = []string{"main.py"}
+	default:
+		files = []string{"main.py", "main.js", "main.go"}
+	}
+
 	for _, fn := range files {
 		fp := filepath.Join(dir, fn)
 		if data, err := os.ReadFile(fp); err == nil {
@@ -201,6 +213,19 @@ func (sm *ScriptManager) GetScript(id string) (string, string, string, error) {
 			return id, lang, string(data), nil
 		}
 	}
+
+	if reqLang != "" {
+		targetLang := strings.ToLower(reqLang)
+		if targetLang == "js" {
+			targetLang = "nodejs"
+		} else if targetLang == "go" {
+			targetLang = "golang"
+		} else if targetLang == "py" {
+			targetLang = "python"
+		}
+		return id, targetLang, "", os.ErrNotExist
+	}
+
 	return id, "python", "", os.ErrNotExist
 }
 

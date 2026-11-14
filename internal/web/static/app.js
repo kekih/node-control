@@ -1273,7 +1273,7 @@ function updateScriptToggleUI(isRunning, lang = currentScriptLang) {
     btn.className = 'btn-script-toggle running';
     btn.title = 'Остановить выполнение скрипта';
     icon.innerHTML = '<rect x="5" y="5" width="14" height="14" rx="2"></rect>';
-    text.innerText = '■ Остановить';
+    text.innerText = 'Остановить';
     if (badge) {
       badge.className = 'log-status-badge running';
       badge.innerText = 'Выполняется';
@@ -1282,7 +1282,7 @@ function updateScriptToggleUI(isRunning, lang = currentScriptLang) {
     btn.className = 'btn-script-toggle idle';
     btn.title = 'Запустить скрипт';
     icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
-    text.innerText = `▶ Запустить ${ext}`;
+    text.innerText = `Запустить ${ext}`;
     if (badge) {
       badge.className = 'log-status-badge';
       badge.innerText = 'Остановлен';
@@ -1305,7 +1305,7 @@ function setScriptLang(lang) {
   document.getElementById('langGo').className = 'tab-btn ' + (lang === 'golang' ? 'active' : '');
 
   updateScriptToggleUI(scriptIsRunning, lang);
-  loadCurrentScript();
+  loadCurrentScript(lang);
 }
 
 function onScriptIdChange() {
@@ -1313,20 +1313,28 @@ function onScriptIdChange() {
   loadScriptSnapshots(id);
 }
 
-async function loadCurrentScript() {
+async function loadCurrentScript(lang = currentScriptLang) {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
   try {
-    const res = await nodeApiFetch(`/api/scripts/get?id=${encodeURIComponent(id)}`);
+    const res = await nodeApiFetch(`/api/scripts/get?id=${encodeURIComponent(id)}&lang=${encodeURIComponent(lang)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.content !== undefined) {
         document.getElementById('scriptContentInput').value = data.content;
       }
-      if (data.language) {
+      // Keep the user-selected language tab active
+      if (lang) {
+        currentScriptLang = lang;
+        document.getElementById('langPy').className = 'tab-btn ' + (lang === 'python' ? 'active' : '');
+        document.getElementById('langNode').className = 'tab-btn ' + (lang === 'nodejs' ? 'active' : '');
+        document.getElementById('langGo').className = 'tab-btn ' + (lang === 'golang' ? 'active' : '');
+        updateScriptToggleUI(scriptIsRunning, lang);
+      } else if (data.language) {
         currentScriptLang = data.language;
         document.getElementById('langPy').className = 'tab-btn ' + (data.language === 'python' ? 'active' : '');
         document.getElementById('langNode').className = 'tab-btn ' + (data.language === 'nodejs' ? 'active' : '');
         document.getElementById('langGo').className = 'tab-btn ' + (data.language === 'golang' ? 'active' : '');
+        updateScriptToggleUI(scriptIsRunning, data.language);
       }
     }
   } catch (e) {

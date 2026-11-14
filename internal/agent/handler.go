@@ -403,12 +403,24 @@ func (h *AgentHandler) handleScriptsGet(w http.ResponseWriter, r *http.Request) 
 	if id == "" {
 		id = "main"
 	}
-	sid, lang, content, err := h.scripts.GetScript(id)
+	reqLang := r.URL.Query().Get("lang")
+	sid, lang, content, err := h.scripts.GetScript(id, reqLang)
 	if err != nil {
+		targetLang := lang
+		if targetLang == "" {
+			targetLang = "python"
+		}
+		defaultCode := "# Python\nprint('Hello from Node Agent!')\n"
+		if targetLang == "nodejs" {
+			defaultCode = "// Node.js\nconsole.log('Hello from Node Agent!');\n"
+		} else if targetLang == "golang" {
+			defaultCode = "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello from Node Agent!\")\n}\n"
+		}
+
 		writeJSON(w, http.StatusOK, map[string]string{
 			"id":       id,
-			"language": "python",
-			"content":  "# Введите код скрипта\nprint('Hello from Node Agent!')\n",
+			"language": targetLang,
+			"content":  defaultCode,
 		})
 		return
 	}
