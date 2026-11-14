@@ -170,7 +170,7 @@
       <!-- ================= VIEW: FILES ================= -->
       <section id="viewFiles" class="view-panel" style="display: none;">
         <!-- Top Action Bar -->
-        <div style="display: flex; gap: 14px; margin-bottom: 22px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap;">
           <button class="btn-primary" onclick="openNewFolderModal()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -197,6 +197,28 @@
             </svg>
             <span>Обновить список</span>
           </button>
+        </div>
+
+        <!-- Upload Progress Bar Container -->
+        <div id="fileUploadProgressContainer" class="upload-progress-card" style="display: none;">
+          <div class="upload-progress-header">
+            <div class="upload-progress-file-info">
+              <svg class="upload-progress-spin-icon spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span id="uploadProgressFileName" class="upload-progress-filename">файл</span>
+              <span id="uploadProgressStatus" class="upload-progress-status">Загрузка...</span>
+            </div>
+            <div class="upload-progress-metrics">
+              <span id="uploadProgressBytes" class="upload-progress-bytes">0 MB / 0 MB</span>
+              <span id="uploadProgressPercent" class="upload-progress-percent">0%</span>
+            </div>
+          </div>
+          <div class="upload-progress-track">
+            <div id="uploadProgressBarFill" class="upload-progress-fill" style="width: 0%;"></div>
+          </div>
         </div>
 
         <!-- Breadcrumbs -->
@@ -597,6 +619,11 @@
           <label class="form-label">Секретный ключ (Secret Key)</label>
           <input type="password" id="newServerSecret" class="form-control" placeholder="Токен авторизации (если задан)">
         </div>
+        <div class="form-group">
+          <label class="form-label">Публичный хост для ссылок (необязательно)</label>
+          <input type="text" id="newServerPublicHost" class="form-control" placeholder="185.120.45.67 или files.mysite.com">
+          <small style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 4px;">Используется для генерации публичных ссылок на порт 9091 (без Tailscale). По умолчанию автоопределяется.</small>
+        </div>
         <button class="btn-primary btn-block" onclick="addNewServer()">Сохранить сервер</button>
       </div>
     </div>
@@ -624,7 +651,15 @@
         <h2>Поделиться файлом</h2>
         <button class="icon-btn" onclick="closeModal('modalShareFile')">✕</button>
       </div>
-      <div style="margin-bottom: 14px; font-size: 14px; color: var(--text-muted);" id="shareFilePrompt">
+      <div class="share-info-badge">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+        <span>Публичный порт 9091 (доступна всем без Tailscale)</span>
+      </div>
+      <div style="margin-bottom: 12px; font-size: 13px; color: var(--text-muted);" id="shareFilePrompt">
         Прямая публичная ссылка для скачивания без пароля:
       </div>
       <div class="form-group">

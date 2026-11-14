@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"runtime"
@@ -12,27 +13,38 @@ import (
 
 // AgentHandler holds all agent sub-managers and handles routing
 type AgentHandler struct {
-	secretKey  string
-	startTime  time.Time
-	files      *FileManager
-	db         *DBManager
-	scripts    *ScriptManager
-	mux        *http.ServeMux
-	version    string
+	secretKey     string
+	startTime     time.Time
+	files         *FileManager
+	db            *DBManager
+	scripts       *ScriptManager
+	mux           *http.ServeMux
+	version       string
+	tailscaleOnly bool
+	sharePort     string
+	publicHost    string
 }
 
-func NewAgentHandler(secretKey, workDir string) *AgentHandler {
+func NewAgentHandler(secretKey, workDir string, tailscaleOnly bool, sharePort, publicHost string) *AgentHandler {
 	h := &AgentHandler{
-		secretKey: secretKey,
-		startTime: time.Now(),
-		files:     NewFileManager(workDir),
-		db:        NewDBManager(),
-		scripts:   NewScriptManager(workDir),
-		mux:       http.NewServeMux(),
-		version:   "1.0.0",
+		secretKey:     secretKey,
+		startTime:     time.Now(),
+		files:         NewFileManager(workDir, sharePort, publicHost),
+		db:            NewDBManager(),
+		scripts:       NewScriptManager(workDir),
+		mux:           http.NewServeMux(),
+		version:       "1.0.0",
+		tailscaleOnly: tailscaleOnly,
+		sharePort:     sharePort,
+		publicHost:    publicHost,
 	}
 	h.registerRoutes()
 	return h
+}
+
+// FileManager returns the underlying file manager
+func (h *AgentHandler) FileManager() *FileManager {
+	return h.files
 }
 
 // ServeHTTP delegates to mux with CORS and Auth
@@ -47,8 +59,39 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Check Tailscale network restriction for management API
+	if h.tailscaleOnly {
+		if !IsTailscaleOrLocal(r.RemoteAddr) {
+			log.Printf("[Tailscale Security] ⛔ Доступ заблокирован: запрос с IP %s к %s (не принадлежит сети Tailscale)", r.RemoteAddr, r.URL.Path)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "Доступ заблокирован: управление сервером разрешено исключительно через сеть Tailscale (100.64.0.0/10)",
+			})
+			return
+		}
+	}
+
+	// Redirect any /share/ on management port to dedicated public share port
+	if strings.HasPrefix(r.URL.Path, "/share/") {
+		token := strings.TrimPrefix(r.URL.Path, "/share/")
+		host := h.publicHost
+		if host == "" {
+			host = DetectPublicIP()
+		}
+		if host == "" {
+			host = "localhost"
+		}
+		port := h.sharePort
+		if port == "" {
+			port = "9091"
+		}
+		http.Redirect(w, r, fmt.Sprintf("http://%s:%s/share/%s", host, port, token), http.StatusTemporaryRedirect)
+		return
+	}
+
 	// Public routes
-	if r.URL.Path == "/api/health" || strings.HasPrefix(r.URL.Path, "/share/") {
+	if r.URL.Path == "/api/health" {
 		h.mux.ServeHTTP(w, r)
 		return
 	}

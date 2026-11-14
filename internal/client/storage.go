@@ -11,14 +11,16 @@ import (
 
 // ServerConfig represents a remote VPS Node agent target
 type ServerConfig struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	URL       string    `json:"url"`       // e.g. "http://1.2.3.4:9090"
-	Secret    string    `json:"secret"`    // secret token for auth
-	IsActive  bool      `json:"is_active"` // whether currently selected
-	Status    string    `json:"status"`    // "online", "offline", "checking"
-	PingMs    int64     `json:"ping_ms"`
-	LastSeen  time.Time `json:"last_seen"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	URL        string    `json:"url"`        // e.g. "http://1.2.3.4:9090"
+	Secret     string    `json:"secret"`     // secret token for auth
+	PublicHost string    `json:"public_host,omitempty"` // optional public IP or domain for share links
+	SharePort  string    `json:"share_port,omitempty"`  // optional dedicated share port
+	IsActive   bool      `json:"is_active"`  // whether currently selected
+	Status     string    `json:"status"`     // "online", "offline", "checking"
+	PingMs     int64     `json:"ping_ms"`
+	LastSeen   time.Time `json:"last_seen"`
 }
 
 // ServerStore manages persisted servers
@@ -96,7 +98,7 @@ func (s *ServerStore) GetActive() (*ServerConfig, error) {
 }
 
 // AddServer adds a new server
-func (s *ServerStore) AddServer(name, url, secret string) (*ServerConfig, error) {
+func (s *ServerStore) AddServer(name, url, secret, publicHost, sharePort string) (*ServerConfig, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -106,12 +108,14 @@ func (s *ServerStore) AddServer(name, url, secret string) (*ServerConfig, error)
 	}
 
 	newSrv := ServerConfig{
-		ID:       id,
-		Name:     name,
-		URL:      url,
-		Secret:   secret,
-		IsActive: len(s.servers) == 0,
-		Status:   "checking",
+		ID:         id,
+		Name:       name,
+		URL:        url,
+		Secret:     secret,
+		PublicHost: publicHost,
+		SharePort:  sharePort,
+		IsActive:   len(s.servers) == 0,
+		Status:     "checking",
 	}
 
 	s.servers = append(s.servers, newSrv)

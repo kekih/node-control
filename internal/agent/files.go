@@ -18,16 +18,23 @@ type FileManager struct {
 	rootDir    string
 	shareLinks map[string]*ShareLink
 	mu         sync.RWMutex
+	sharePort  string
+	publicHost string
 }
 
-func NewFileManager(rootDir string) *FileManager {
+func NewFileManager(rootDir, sharePort, publicHost string) *FileManager {
 	if rootDir == "" {
 		rootDir, _ = os.Getwd()
+	}
+	if sharePort == "" {
+		sharePort = "9091"
 	}
 	_ = os.MkdirAll(rootDir, 0755)
 	return &FileManager{
 		rootDir:    rootDir,
 		shareLinks: make(map[string]*ShareLink),
+		sharePort:  sharePort,
+		publicHost: publicHost,
 	}
 }
 
@@ -142,12 +149,35 @@ func (fm *FileManager) CreateShareLink(filePath string) (*ShareLink, error) {
 	}
 	token := hex.EncodeToString(bytes)
 
+	host := fm.publicHost
+	if host == "" {
+		host = DetectPublicIP()
+	}
+	if host == "" {
+		h, err := os.Hostname()
+		if err == nil && h != "" {
+			host = h
+		} else {
+			host = "localhost"
+		}
+	}
+
+	port := fm.sharePort
+	if port == "" {
+		port = "9091"
+	}
+
+	shareURL := fmt.Sprintf("http://%s:%s/share/%s", host, port, token)
+
 	link := &ShareLink{
-		Token:     token,
-		FilePath:  fullPath,
-		FileName:  fi.Name(),
-		CreatedAt: time.Now(),
-		Downloads: 0,
+		Token:      token,
+		FilePath:   fullPath,
+		FileName:   fi.Name(),
+		CreatedAt:  time.Now(),
+		Downloads:  0,
+		SharePort:  port,
+		PublicHost: host,
+		ShareURL:   shareURL,
 	}
 
 	fm.mu.Lock()
@@ -216,8 +246,18 @@ func (fm *FileManager) HandleUpload(r *http.Request) (string, error) {
 
 // HandlePublicShareDownload serves shared file without requiring authentication
 func (fm *FileManager) HandlePublicShareDownload(w http.ResponseWriter, r *http.Request) {
-	// URL pattern: /share/{token}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// URL pattern: /share/{token} or /{token}
 	token := strings.TrimPrefix(r.URL.Path, "/share/")
+	token = strings.TrimPrefix(token, "/")
 	token = strings.TrimSpace(token)
 
 	fm.mu.Lock()
@@ -249,4 +289,32 @@ func (fm *FileManager) HandlePublicShareDownload(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
 	http.ServeContent(w, r, fi.Name(), fi.ModTime(), file)
+}
+
+// NewShareRouter returns an http.Handler for the dedicated share port
+// (serves ONLY shared file downloads, no admin endpoints, no Tailscale restriction)
+func (fm *FileManager) NewShareRouter() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/share/", fm.HandlePublicShareDownload)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.URL.Path == "/" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Node Share Server</title><style>body{background:#0b0f19;color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box} .card{background:#161d2d;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:36px;max-width:440px;text-align:center;box-shadow:0 16px 36px rgba(0,0,0,0.5)} h2{margin:0 0 12px;color:#00c2ff;font-size:24px} p{color:#8ea0be;font-size:14px;line-height:1.6;margin:0 0 20px} .badge{display:inline-block;padding:4px 12px;background:rgba(0,194,255,0.1);color:#00c2ff;border-radius:20px;font-size:12px;font-weight:600;border:1px solid rgba(0,194,255,0.25)}</style></head><body><div class="card"><div style="font-size:40px;margin-bottom:12px;">📁</div><h2>Node File Share</h2><div class="badge">Публичный файловый сервер</div><p style="margin-top:16px">Этот порт предназначен исключительно для публичной раздачи файлов по прямым ссылкам.</p></div></body></html>`))
+			return
+		}
+		token := strings.TrimPrefix(r.URL.Path, "/")
+		if token != "" && !strings.Contains(token, "/") {
+			r.URL.Path = "/share/" + token
+			fm.HandlePublicShareDownload(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	return mux
 }

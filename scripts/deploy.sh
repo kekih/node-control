@@ -3,7 +3,8 @@
 set -e
 
 PORT=${1:-9090}
-SECRET=${2:-""}
+SHARE_PORT=${2:-9091}
+SECRET=${3:-""}
 
 echo "=== Установка Node Agent на VPS ==="
 
@@ -30,7 +31,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/node-agent/workdir
-ExecStart=/opt/node-agent/node-agent -port ${PORT} -secret "${SECRET}" -dir /opt/node-agent/workdir
+ExecStart=/opt/node-agent/node-agent -port ${PORT} -share-port ${SHARE_PORT} -secret "${SECRET}" -dir /opt/node-agent/workdir
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
@@ -44,5 +45,6 @@ systemctl enable node-agent
 systemctl restart node-agent
 
 echo "=== Node Agent успешно установлен и запущен! ==="
-echo "Порт: ${PORT}"
+echo "Порт управления (Tailscale): ${PORT}"
+echo "Порт раздачи файлов (Public): ${SHARE_PORT}"
 echo "Статус сервиса: systemctl status node-agent"

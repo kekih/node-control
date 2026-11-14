@@ -261,7 +261,7 @@ function renderServerList(servers) {
         <span class="server-status-dot ${srv.status === 'online' ? 'online' : 'offline'}"></span>
         <div class="server-item-text">
           <h4>${escapeHtml(srv.name)} ${srv.is_active ? '<span style="color: var(--cyan-primary); font-size:12px; margin-left:6px;">✓ Активный</span>' : ''}</h4>
-          <p>${escapeHtml(srv.url)} ${srv.ping_ms ? ' • ' + srv.ping_ms + ' ms' : ''}</p>
+          <p>${escapeHtml(srv.url)}${srv.public_host ? ' • Публичный: ' + escapeHtml(srv.public_host) : ''} ${srv.ping_ms ? ' • ' + srv.ping_ms + ' ms' : ''}</p>
         </div>
       </div>
       <div>
@@ -305,6 +305,8 @@ async function addNewServer() {
   const name = document.getElementById('newServerName').value.trim();
   const url = document.getElementById('newServerUrl').value.trim();
   const secret = document.getElementById('newServerSecret').value.trim();
+  const publicHostEl = document.getElementById('newServerPublicHost');
+  const public_host = publicHostEl ? publicHostEl.value.trim() : '';
 
   if (!url) {
     alert('Пожалуйста, укажите URL сервера');
@@ -318,6 +320,7 @@ async function addNewServer() {
       name: name || ('Сервер ' + (list.length + 1)),
       url,
       secret,
+      public_host,
       is_active: list.length === 0,
       status: 'unknown'
     };
@@ -326,6 +329,7 @@ async function addNewServer() {
     document.getElementById('newServerName').value = '';
     document.getElementById('newServerUrl').value = '';
     document.getElementById('newServerSecret').value = '';
+    if (publicHostEl) publicHostEl.value = '';
     await loadServerModalList();
     await initServers();
     return;
@@ -335,12 +339,13 @@ async function addNewServer() {
     const res = await fetch('/api/client/servers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, url, secret })
+      body: JSON.stringify({ name, url, secret, public_host })
     });
     if (res.ok) {
       document.getElementById('newServerName').value = '';
       document.getElementById('newServerUrl').value = '';
       document.getElementById('newServerSecret').value = '';
+      if (publicHostEl) publicHostEl.value = '';
       await loadServerModalList();
       await initServers();
     } else {
@@ -526,29 +531,110 @@ async function createFolder() {
   }
 }
 
-async function uploadSelectedFile() {
+function formatBytes(bytes, decimals = 1) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function uploadSelectedFile() {
   const input = document.getElementById('fileUploadInput');
   if (!input.files || input.files.length === 0) return;
   const file = input.files[0];
+
+  const progressCard = document.getElementById('fileUploadProgressContainer');
+  const nameEl = document.getElementById('uploadProgressFileName');
+  const statusEl = document.getElementById('uploadProgressStatus');
+  const bytesEl = document.getElementById('uploadProgressBytes');
+  const percentEl = document.getElementById('uploadProgressPercent');
+  const fillEl = document.getElementById('uploadProgressBarFill');
+
+  // Display initial upload card
+  nameEl.innerText = file.name;
+  statusEl.innerText = 'Загрузка...';
+  bytesEl.innerText = `0 B / ${formatBytes(file.size)}`;
+  percentEl.innerText = '0%';
+  fillEl.style.width = '0%';
+  fillEl.style.background = 'linear-gradient(90deg, #00c2ff, #00e5ff)';
+  progressCard.style.display = 'block';
+
+  let targetUrl = '';
+  let authHeader = '';
+  if (isDirectMode) {
+    if (!activeServer || !activeServer.url) {
+      alert('Укажите URL сервера в настройках');
+      progressCard.style.display = 'none';
+      return;
+    }
+    targetUrl = activeServer.url.replace(/\/$/, '') + '/api/files/upload';
+    if (activeServer.secret) {
+      authHeader = 'Bearer ' + activeServer.secret;
+    }
+  } else {
+    targetUrl = '/api/proxy/api/files/upload';
+  }
 
   const formData = new FormData();
   formData.append('file', file);
   formData.append('dir', currentFilesPath);
 
-  try {
-    const res = await nodeApiFetch('/api/files/upload', {
-      method: 'POST',
-      body: formData
-    });
-    if (res.ok) {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', targetUrl, true);
+  if (authHeader) {
+    xhr.setRequestHeader('Authorization', authHeader);
+  }
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      fillEl.style.width = percent + '%';
+      percentEl.innerText = percent + '%';
+      bytesEl.innerText = `${formatBytes(e.loaded)} / ${formatBytes(e.total)}`;
+      if (percent >= 100) {
+        statusEl.innerText = 'Обработка на сервере...';
+      }
+    }
+  };
+
+  xhr.onload = () => {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      fillEl.style.width = '100%';
+      percentEl.innerText = '100%';
+      statusEl.innerText = '✓ Файл успешно загружен!';
+      fillEl.style.background = 'linear-gradient(90deg, #10b981, #34d399)';
       input.value = '';
       loadFiles(currentFilesPath);
+      setTimeout(() => {
+        progressCard.style.display = 'none';
+      }, 2000);
     } else {
-      alert('Ошибка загрузки файла');
+      let errMsg = 'Ошибка загрузки (' + xhr.status + ')';
+      try {
+        const errJson = JSON.parse(xhr.responseText);
+        if (errJson && errJson.error) errMsg = errJson.error;
+      } catch (e) {}
+      statusEl.innerText = '✕ ' + errMsg;
+      fillEl.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
+      alert('Ошибка загрузки файла: ' + errMsg);
+      setTimeout(() => {
+        progressCard.style.display = 'none';
+      }, 3500);
     }
-  } catch (e) {
-    alert('Ошибка: ' + e.message);
-  }
+  };
+
+  xhr.onerror = () => {
+    statusEl.innerText = '✕ Ошибка сети при передаче';
+    fillEl.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
+    alert('Ошибка соединения при передаче файла на сервер');
+    setTimeout(() => {
+      progressCard.style.display = 'none';
+    }, 3500);
+  };
+
+  xhr.send(formData);
 }
 
 function downloadFile(filePath) {
@@ -568,12 +654,35 @@ async function shareFile(filePath) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert('Ошибка: ' + err.error);
+      alert('Ошибка: ' + (err.error || 'Не удалось создать ссылку'));
       return;
     }
     const data = await res.json();
-    const remoteUrl = activeServer ? activeServer.url.replace(/\/$/, '') : window.location.origin;
-    const directShareUrl = `${remoteUrl}/share/${data.token}`;
+
+    // 1. Check if backend returned full share_url (uses public IP and share port 9091, NOT Tailscale)
+    let directShareUrl = data.share_url;
+
+    // 2. If client configured custom public_host for activeServer, use that
+    if (activeServer && activeServer.public_host) {
+      const sharePort = data.share_port || activeServer.share_port || '9091';
+      directShareUrl = `http://${activeServer.public_host}:${sharePort}/share/${data.token}`;
+    }
+
+    // 3. Fallback if share_url is empty
+    if (!directShareUrl) {
+      const sharePort = data.share_port || (activeServer && activeServer.share_port) || '9091';
+      let publicHost = data.public_host || (activeServer && activeServer.public_host);
+      if (!publicHost && activeServer && activeServer.url) {
+        try {
+          const u = new URL(activeServer.url);
+          publicHost = u.hostname;
+        } catch (e) {
+          publicHost = window.location.hostname;
+        }
+      }
+      directShareUrl = `http://${publicHost || window.location.hostname}:${sharePort}/share/${data.token}`;
+    }
+
     document.getElementById('shareUrlInput').value = directShareUrl;
     openModal('modalShareFile');
   } catch (e) {

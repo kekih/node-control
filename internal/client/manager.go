@@ -83,9 +83,11 @@ func (cm *ClientManager) handleServers(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(cm.store.List())
 	case http.MethodPost:
 		var body struct {
-			Name   string `json:"name"`
-			URL    string `json:"url"`
-			Secret string `json:"secret"`
+			Name       string `json:"name"`
+			URL        string `json:"url"`
+			Secret     string `json:"secret"`
+			PublicHost string `json:"public_host"`
+			SharePort  string `json:"share_port"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, `{"error":"Неверный запрос"}`, http.StatusBadRequest)
@@ -95,7 +97,7 @@ func (cm *ClientManager) handleServers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"URL сервера обязателен"}`, http.StatusBadRequest)
 			return
 		}
-		srv, err := cm.store.AddServer(body.Name, body.URL, body.Secret)
+		srv, err := cm.store.AddServer(body.Name, body.URL, body.Secret, body.PublicHost, body.SharePort)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
 			return

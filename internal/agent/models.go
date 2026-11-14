@@ -33,11 +33,14 @@ type FilesListResponse struct {
 
 // ShareLink represents a shared file link
 type ShareLink struct {
-	Token     string    `json:"token"`
-	FilePath  string    `json:"file_path"`
-	FileName  string    `json:"file_name"`
-	CreatedAt time.Time `json:"created_at"`
-	Downloads int       `json:"downloads"`
+	Token      string    `json:"token"`
+	FilePath   string    `json:"file_path"`
+	FileName   string    `json:"file_name"`
+	CreatedAt  time.Time `json:"created_at"`
+	Downloads  int       `json:"downloads"`
+	SharePort  string    `json:"share_port,omitempty"`
+	PublicHost string    `json:"public_host,omitempty"`
+	ShareURL   string    `json:"share_url,omitempty"`
 }
 
 // DBRequest represents database connection and command requests
