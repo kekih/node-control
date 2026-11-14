@@ -1,0 +1,252 @@
+package agent
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+// FileManager manages server files and shareable links
+type FileManager struct {
+	rootDir    string
+	shareLinks map[string]*ShareLink
+	mu         sync.RWMutex
+}
+
+func NewFileManager(rootDir string) *FileManager {
+	if rootDir == "" {
+		rootDir, _ = os.Getwd()
+	}
+	_ = os.MkdirAll(rootDir, 0755)
+	return &FileManager{
+		rootDir:    rootDir,
+		shareLinks: make(map[string]*ShareLink),
+	}
+}
+
+// resolveSafePath verifies target is within allowed root
+func (fm *FileManager) resolveSafePath(userPath string) (string, error) {
+	if userPath == "" || userPath == "." || userPath == "/" {
+		return fm.rootDir, nil
+	}
+	clean := filepath.Clean(userPath)
+	if !filepath.IsAbs(clean) {
+		clean = filepath.Join(fm.rootDir, clean)
+	}
+	return clean, nil
+}
+
+// ListDirectory returns items in directory
+func (fm *FileManager) ListDirectory(targetPath string) (*FilesListResponse, error) {
+	fullPath, err := fm.resolveSafePath(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []FileItem
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		itemPath := filepath.Join(fullPath, entry.Name())
+		items = append(items, FileItem{
+			Name:    entry.Name(),
+			Path:    itemPath,
+			IsDir:   entry.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime(),
+			Ext:     filepath.Ext(entry.Name()),
+		})
+	}
+
+	parent := filepath.Dir(fullPath)
+	return &FilesListResponse{
+		CurrentPath: fullPath,
+		ParentPath:  parent,
+		Items:       items,
+	}, nil
+}
+
+// CreateDirectory creates folder
+func (fm *FileManager) CreateDirectory(targetPath string) error {
+	fullPath, err := fm.resolveSafePath(targetPath)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(fullPath, 0755)
+}
+
+// DeleteItem removes a file or folder
+func (fm *FileManager) DeleteItem(targetPath string) error {
+	fullPath, err := fm.resolveSafePath(targetPath)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(fullPath)
+}
+
+// ReadFile reads file contents as string
+func (fm *FileManager) ReadFile(targetPath string) (string, error) {
+	fullPath, err := fm.resolveSafePath(targetPath)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// WriteFile writes file contents
+func (fm *FileManager) WriteFile(targetPath, content string) error {
+	fullPath, err := fm.resolveSafePath(targetPath)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(fullPath)
+	_ = os.MkdirAll(dir, 0755)
+	return os.WriteFile(fullPath, []byte(content), 0644)
+}
+
+// CreateShareLink generates a secure token for sharing a file
+func (fm *FileManager) CreateShareLink(filePath string) (*ShareLink, error) {
+	fullPath, err := fm.resolveSafePath(filePath)
+	if err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, fmt.Errorf("нельзя поделиться всей папкой, выберите файл")
+	}
+
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return nil, err
+	}
+	token := hex.EncodeToString(bytes)
+
+	link := &ShareLink{
+		Token:     token,
+		FilePath:  fullPath,
+		FileName:  fi.Name(),
+		CreatedAt: time.Now(),
+		Downloads: 0,
+	}
+
+	fm.mu.Lock()
+	fm.shareLinks[token] = link
+	fm.mu.Unlock()
+
+	return link, nil
+}
+
+// GetShareLink retrieves link by token
+func (fm *FileManager) GetShareLink(token string) (*ShareLink, bool) {
+	fm.mu.RLock()
+	defer fm.mu.RUnlock()
+	link, ok := fm.shareLinks[token]
+	return link, ok
+}
+
+// ListShareLinks returns all active shares
+func (fm *FileManager) ListShareLinks() []*ShareLink {
+	fm.mu.RLock()
+	defer fm.mu.RUnlock()
+	var list []*ShareLink
+	for _, l := range fm.shareLinks {
+		list = append(list, l)
+	}
+	return list
+}
+
+// RevokeShare removes a share token
+func (fm *FileManager) RevokeShare(token string) {
+	fm.mu.Lock()
+	delete(fm.shareLinks, token)
+	fm.mu.Unlock()
+}
+
+// HandleUpload handles multipart file uploads
+func (fm *FileManager) HandleUpload(r *http.Request) (string, error) {
+	err := r.ParseMultipartForm(100 << 20) // 100MB
+	if err != nil {
+		return "", err
+	}
+
+	destDir := r.FormValue("dir")
+	fullDir, err := fm.resolveSafePath(destDir)
+	if err != nil {
+		return "", err
+	}
+	_ = os.MkdirAll(fullDir, 0755)
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	destPath := filepath.Join(fullDir, header.Filename)
+	out, err := os.Create(destPath)
+	if err != nil {
+		return "", err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, file)
+	return destPath, err
+}
+
+// HandlePublicShareDownload serves shared file without requiring authentication
+func (fm *FileManager) HandlePublicShareDownload(w http.ResponseWriter, r *http.Request) {
+	// URL pattern: /share/{token}
+	token := strings.TrimPrefix(r.URL.Path, "/share/")
+	token = strings.TrimSpace(token)
+
+	fm.mu.Lock()
+	link, ok := fm.shareLinks[token]
+	if ok {
+		link.Downloads++
+	}
+	fm.mu.Unlock()
+
+	if !ok || link == nil {
+		http.Error(w, "Ссылка недействительна или срок действия истек", http.StatusNotFound)
+		return
+	}
+
+	file, err := os.Open(link.FilePath)
+	if err != nil {
+		http.Error(w, "Файл не найден на сервере", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	fi, err := file.Stat()
+	if err != nil {
+		http.Error(w, "Ошибка чтения информации о файле", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fi.Name()))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+	http.ServeContent(w, r, fi.Name(), fi.ModTime(), file)
+}

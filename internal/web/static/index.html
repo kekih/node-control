@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Node - Управление Сервером</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button id="btnBack" class="back-btn" onclick="navigateTo('dashboard')" title="Назад">←</button>
+        <div class="header-title-box">
+          <h1 id="headerTitle">Node</h1>
+          <div id="headerSubtitle" class="header-subtitle">Клиент сервера</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Server Switcher Pill in the top corner -->
+        <button id="btnServerSwitcher" class="server-switcher-btn" onclick="openServerModal()" title="Переключить сервер">
+          <span id="activeServerDot" class="server-status-dot"></span>
+          <span id="activeServerName">Сервер...</span>
+          <span style="font-size: 10px; opacity: 0.7;">▼</span>
+        </button>
+
+        <!-- Refresh Button -->
+        <button id="btnGlobalRefresh" class="icon-btn" onclick="refreshCurrentView()" title="Обновить">↻</button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-content">
+
+      <!-- ================= VIEW: DASHBOARD ================= -->
+      <section id="viewDashboard" class="view-panel">
+        <!-- Health Status Banner (Matching Screenshot 6) -->
+        <div id="healthBanner" class="health-banner checking" onclick="checkActiveHealth()">
+          <div class="health-info">
+            <div id="healthIcon" class="health-icon-box">!</div>
+            <div class="health-text">
+              <h3 id="healthTitle">Проверка health...</h3>
+              <div id="healthUrl" class="health-url">Подключение к серверу...</div>
+            </div>
+          </div>
+          <button class="health-refresh-btn" title="Проверить соединение">↻</button>
+        </div>
+
+        <!-- Section Grid Title -->
+        <div class="section-heading">Разделы</div>
+
+        <!-- Grid Cards (Files, Databases, Scripts) -->
+        <div class="dashboard-grid">
+          <!-- Files -->
+          <div class="dash-card" onclick="navigateTo('files')">
+            <div class="dash-icon-box dash-icon-files">📁</div>
+            <span>Файлы</span>
+          </div>
+
+          <!-- Databases -->
+          <div class="dash-card" onclick="navigateTo('db')">
+            <div class="dash-icon-box dash-icon-db">🗄️</div>
+            <span>Базы</span>
+          </div>
+
+          <!-- Scripts -->
+          <div class="dash-card" onclick="navigateTo('scripts')">
+            <div class="dash-icon-box dash-icon-scripts">&lt;&nbsp;&gt;</div>
+            <span>Скрипты</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= VIEW: FILES ================= -->
+      <section id="viewFiles" class="view-panel" style="display: none;">
+        <!-- Top Action Buttons (Matching Screenshot 3) -->
+        <div class="btn-row">
+          <button class="btn-primary" onclick="openNewFolderModal()">
+            <span>+ Создать</span>
+          </button>
+          <button class="btn-outline" onclick="loadFiles()">
+            <span>↻ Обновить</span>
+          </button>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label class="btn-outline btn-block" style="text-align: center; cursor: pointer;">
+            <span>↑ Загрузить файл</span>
+            <input type="file" id="fileUploadInput" onchange="uploadSelectedFile()" style="display: none;">
+          </label>
+        </div>
+
+        <!-- Breadcrumbs -->
+        <div class="breadcrumbs" id="filesBreadcrumbs">
+          <span class="breadcrumb-item" onclick="browseFolder('/')">/</span>
+        </div>
+
+        <!-- File List -->
+        <div id="fileListContainer" class="file-list"></div>
+
+        <!-- Empty State -->
+        <div id="filesEmptyState" class="empty-state" style="display: none;">
+          <div class="empty-icon">📂⃠</div>
+          <p>Нет файлов и папок</p>
+        </div>
+      </section>
+
+      <!-- ================= VIEW: DATABASES ================= -->
+      <section id="viewDb" class="view-panel" style="display: none;">
+        <!-- Driver Selection Tabs -->
+        <div class="tabs-container">
+          <button id="tabPg" class="tab-btn active" onclick="switchDbDriver('postgres')">PostgreSQL</button>
+          <button id="tabMysql" class="tab-btn" onclick="switchDbDriver('mysql')">MySQL</button>
+        </div>
+
+        <!-- Database Settings Toggle -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <button class="btn-outline" style="padding: 6px 14px; font-size: 12px;" onclick="toggleDbConfigModal()">
+            ⚙️ Параметры подключения
+          </button>
+          <button class="btn-outline" style="padding: 6px 14px; font-size: 12px;" onclick="openCreateDbModal()">
+            + Создать БД
+          </button>
+        </div>
+
+        <!-- DB Sub-mode Tabs: Key-Value Form (Screenshot 2) & SQL Console -->
+        <div class="tabs-container" style="background: rgba(255,255,255,0.03);">
+          <button id="subTabKV" class="tab-btn active" onclick="switchDbSubTab('kv')">Запись / Чтение</button>
+          <button id="subTabSQL" class="tab-btn" onclick="switchDbSubTab('sql')">SQL Консоль</button>
+        </div>
+
+        <!-- KV Panel (Exact match of Screenshot 2) -->
+        <div id="panelDbKV">
+          <div class="form-group">
+            <label class="form-label">Имя базы</label>
+            <input type="text" id="dbNameInput" class="form-control" value="postgres" placeholder="Название базы">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Путь (Ключ / Таблица)</label>
+            <input type="text" id="dbPathInput" class="form-control" placeholder="Ключ или путь (напр. config/user)">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Значение</label>
+            <textarea id="dbValueInput" class="form-control" placeholder="Значение или JSON данные..."></textarea>
+          </div>
+
+          <!-- Checkboxes (Merge & Force) -->
+          <div class="checkbox-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="dbMergeCheck">
+              <span>Merge</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="dbForceCheck">
+              <span>Force</span>
+            </label>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="btn-row">
+            <button class="btn-primary" onclick="dbReadKV()">
+              <span>↓ Читать</span>
+            </button>
+            <button class="btn-primary" onclick="dbWriteKV()">
+              <span>↑ Записать</span>
+            </button>
+          </div>
+
+          <button class="btn-danger-outline btn-block" onclick="dbDeleteKV()">
+            <span>🗑 Удалить</span>
+          </button>
+        </div>
+
+        <!-- SQL Console Panel -->
+        <div id="panelDbSQL" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">SQL Запрос</label>
+            <textarea id="dbSqlQueryInput" class="form-control" rows="4" placeholder="SELECT * FROM node_kv;"></textarea>
+          </div>
+          <button class="btn-primary btn-block" onclick="executeSqlQuery()">▶ Выполнить запрос</button>
+          
+          <div id="sqlQueryResult" class="sql-table-container" style="display: none;"></div>
+        </div>
+      </section>
+
+      <!-- ================= VIEW: SCRIPTS ================= -->
+      <section id="viewScripts" class="view-panel" style="display: none;">
+        <!-- ID Скрипта (Matching Screenshot 1) -->
+        <div class="form-group">
+          <label class="form-label">ID скрипта</label>
+          <input type="text" id="scriptIdInput" class="form-control" value="main" placeholder="ID скрипта (например: bot)">
+        </div>
+
+        <!-- Language Selector -->
+        <div class="tabs-container">
+          <button id="langPy" class="tab-btn active" onclick="setScriptLang('python')">Python (.py)</button>
+          <button id="langNode" class="tab-btn" onclick="setScriptLang('nodejs')">Node.js (.js)</button>
+          <button id="langGo" class="tab-btn" onclick="setScriptLang('golang')">Golang (.go)</button>
+        </div>
+
+        <!-- Script Code Editor / Upload Area -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Код скрипта</label>
+            <label style="font-size: 12px; color: var(--cyan-primary); cursor: pointer;">
+              Загрузить файл
+              <input type="file" id="scriptUploadFile" onchange="loadScriptFromFile(event)" style="display: none;">
+            </label>
+          </div>
+          <textarea id="scriptContentInput" class="form-control" style="min-height: 140px;" placeholder="# Введите код скрипта..."></textarea>
+        </div>
+
+        <!-- Auto dependencies toggle -->
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="scriptAutoDeps" checked>
+            <span>Автоматически устанавливать недостающие зависимости (pip / npm / go mod)</span>
+          </label>
+        </div>
+
+        <!-- Row: Загрузить/Сохранить & Стоп -->
+        <div class="btn-row">
+          <button id="btnScriptAction" class="btn-primary" onclick="runScript()">
+            <span id="btnScriptActionText">▶ Запустить .py</span>
+          </button>
+          <button class="btn-outline" onclick="stopScript()">
+            <span>■ Стоп</span>
+          </button>
+        </div>
+
+        <!-- Wide Button: Получить логи (Matching Screenshot 1) -->
+        <button class="btn-primary btn-block" style="margin-bottom: 16px;" onclick="fetchScriptLogs()">
+          <span>≡ Получить логи</span>
+        </button>
+
+        <!-- Log Card & Terminal (Matching Screenshot 1) -->
+        <div class="log-panel">
+          <div class="log-panel-header">
+            <h3>Логи</h3>
+            <span id="scriptStatusBadge" class="log-status-badge">Ожидание...</span>
+          </div>
+          <div id="scriptLogsTerminal" class="log-terminal">Логи появятся здесь...</div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Spinner Ring Indicator (From Screenshot 6) -->
+    <div id="globalSpinner" class="bottom-spinner-container">
+      <div class="cyan-spinner-ring"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- Modal: Server Switcher & Manager -->
+  <div id="modalServer" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalServer')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Управление серверами</h2>
+        <button class="icon-btn" onclick="closeModal('modalServer')">✕</button>
+      </div>
+
+      <!-- Server List -->
+      <div id="serverListContainer" style="margin-bottom: 20px;"></div>
+
+      <!-- Add Server Form -->
+      <div style="background: var(--bg-card); padding: 16px; border-radius: 14px; border: 1px solid var(--border-color);">
+        <h4 style="font-size: 14px; margin-bottom: 12px; color: var(--cyan-primary);">+ Добавить новый узел</h4>
+        <div class="form-group">
+          <label class="form-label">Название сервера</label>
+          <input type="text" id="newServerName" class="form-control" placeholder="Например: VPS Германия">
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL сервера (с портом)</label>
+          <input type="text" id="newServerUrl" class="form-control" placeholder="http://123.45.67.89:9090">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Секретный ключ (Secret Key)</label>
+          <input type="password" id="newServerSecret" class="form-control" placeholder="Токен авторизации (если задан)">
+        </div>
+        <button class="btn-primary btn-block" onclick="addNewServer()">Сохранить сервер</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Folder -->
+  <div id="modalNewFolder" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalNewFolder')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Новая папка</h2>
+        <button class="icon-btn" onclick="closeModal('modalNewFolder')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Название папки</label>
+        <input type="text" id="newFolderNameInput" class="form-control" placeholder="Название">
+      </div>
+      <button class="btn-primary btn-block" onclick="createFolder()">Создать</button>
+    </div>
+  </div>
+
+  <!-- Modal: Share File -->
+  <div id="modalShareFile" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalShareFile')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Поделиться файлом</h2>
+        <button class="icon-btn" onclick="closeModal('modalShareFile')">✕</button>
+      </div>
+      <div style="margin-bottom: 14px; font-size: 14px; color: var(--text-muted);" id="shareFilePrompt">
+        Публичная прямая ссылка для скачивания без пароля:
+      </div>
+      <div class="form-group">
+        <input type="text" id="shareUrlInput" class="form-control" readonly>
+      </div>
+      <button class="btn-primary btn-block" onclick="copyShareUrl()">📋 Скопировать ссылку</button>
+    </div>
+  </div>
+
+  <!-- Modal: Edit File -->
+  <div id="modalEditFile" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalEditFile')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="editFileTitle">Редактирование файла</h2>
+        <button class="icon-btn" onclick="closeModal('modalEditFile')">✕</button>
+      </div>
+      <div class="form-group">
+        <textarea id="editFileContent" class="form-control" style="height: 300px;"></textarea>
+      </div>
+      <button class="btn-primary btn-block" onclick="saveFileContent()">Сохранить изменения</button>
+    </div>
+  </div>
+
+  <!-- Modal: DB Config Settings -->
+  <div id="modalDbConfig" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalDbConfig')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Параметры СУБД</h2>
+        <button class="icon-btn" onclick="closeModal('modalDbConfig')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Хост</label>
+        <input type="text" id="dbHostInput" class="form-control" value="localhost">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Порт</label>
+        <input type="number" id="dbPortInput" class="form-control" value="5432">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пользователь</label>
+        <input type="text" id="dbUserInput" class="form-control" value="postgres">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" id="dbPassInput" class="form-control" placeholder="Пароль базы данных">
+      </div>
+      <button class="btn-primary btn-block" onclick="testDbConnection()">Проверить подключение</button>
+    </div>
+  </div>
+
+  <!-- Modal: Create DB -->
+  <div id="modalCreateDb" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalCreateDb')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Создание базы данных</h2>
+        <button class="icon-btn" onclick="closeModal('modalCreateDb')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Имя новой базы данных</label>
+        <input type="text" id="newDbNameInput" class="form-control" placeholder="my_database">
+      </div>
+      <button class="btn-primary btn-block" onclick="createDatabaseSubmit()">Создать базу</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
