@@ -15,8 +15,36 @@ let offlineTimeout = null;
 const isDirectMode = window.location.protocol === 'file:' || 
   (!window.location.host.includes('localhost') && !window.location.host.includes('127.0.0.1') && !window.location.port);
 
+// ================= THEMES =================
+function initTheme() {
+  const saved = localStorage.getItem('node_theme') || 'dark';
+  setTheme(saved, false);
+}
+
+function setTheme(themeName, save = true) {
+  document.documentElement.setAttribute('data-theme', themeName);
+  document.body.setAttribute('data-theme', themeName);
+  if (save) {
+    localStorage.setItem('node_theme', themeName);
+    closeModal('modalTheme');
+  }
+}
+
+function openThemeModal() {
+  openModal('modalTheme');
+}
+
+function triggerFileUpload() {
+  const input = document.getElementById('fileUploadInput');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initServers();
   // Auto-refresh active server ping every 5 seconds
   setInterval(refreshHealthBanner, 5000);
@@ -30,32 +58,33 @@ function navigateTo(view) {
   document.getElementById('viewDb').style.display = view === 'db' ? 'block' : 'none';
   document.getElementById('viewScripts').style.display = view === 'scripts' ? 'block' : 'none';
 
+  const brand = document.getElementById('headerBrand');
   const backBtn = document.getElementById('btnBack');
-  const title = document.getElementById('headerTitle');
-  const subtitle = document.getElementById('headerSubtitle');
-
-  title.innerText = 'Node';
+  const backBtnText = document.getElementById('backBtnText');
 
   if (view === 'dashboard') {
-    backBtn.style.display = 'none';
-    subtitle.innerText = 'Панель управления сервером';
+    if (brand) brand.style.display = 'flex';
+    if (backBtn) backBtn.style.display = 'none';
     refreshHealthBanner();
-  } else if (view === 'files') {
-    backBtn.style.display = 'flex';
-    subtitle.innerText = 'Файлы';
-    loadFiles(currentFilesPath);
-  } else if (view === 'db') {
-    backBtn.style.display = 'flex';
-    subtitle.innerText = 'Базы данных';
-    loadDatabasesList();
-  } else if (view === 'scripts') {
-    backBtn.style.display = 'flex';
-    subtitle.innerText = 'Скрипты';
-    loadCurrentScript();
-    loadScriptsList();
-    const curId = document.getElementById('scriptIdInput').value.trim() || 'main';
-    loadScriptSnapshots(curId);
-    connectScriptWS(curId);
+  } else {
+    // "когда я зашел в какой то раздел, назвение уберается"
+    if (brand) brand.style.display = 'none';
+    if (backBtn) backBtn.style.display = 'inline-flex';
+
+    if (view === 'files') {
+      if (backBtnText) backBtnText.innerText = 'Файлы';
+      loadFiles(currentFilesPath);
+    } else if (view === 'db') {
+      if (backBtnText) backBtnText.innerText = 'Базы данных';
+      loadDatabasesList();
+    } else if (view === 'scripts') {
+      if (backBtnText) backBtnText.innerText = 'Скрипты';
+      loadCurrentScript();
+      loadScriptsList();
+      const curId = document.getElementById('scriptIdInput').value.trim() || 'main';
+      loadScriptSnapshots(curId);
+      connectScriptWS(curId);
+    }
   }
 }
 

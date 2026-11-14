@@ -36,12 +36,13 @@ Write-Host "[2/6] Компиляция ресурсов (aapt2 compile)..." -For
 if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
 
 Write-Host "[3/6] Линковка APK и генерация R.java (aapt2 link)..." -ForegroundColor Yellow
-& $Aapt2 link -I $AndroidJar --manifest "$ScriptDir\AndroidManifest.xml" --min-sdk-version 24 --target-sdk-version 34 --version-code 1 --version-name "1.0.0" "$BuildDir\compiled_res.zip" -A "$ScriptDir\assets" --java "$BuildDir\gen" -o "$BuildDir\base.apk"
+& $Aapt2 link -I $AndroidJar --manifest "$ScriptDir\AndroidManifest.xml" --min-sdk-version 24 --target-sdk-version 34 --version-code 2 --version-name "1.0.1" "$BuildDir\compiled_res.zip" -A "$ScriptDir\assets" --java "$BuildDir\gen" -o "$BuildDir\base.apk"
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 
 Write-Host "[4/6] Компиляция Java кода (javac)..." -ForegroundColor Yellow
 $JavaSources = @(
     "$ScriptDir\src\com\node\control\MainActivity.java",
+    "$ScriptDir\src\com\node\control\NodeChromeClient.java",
     "$BuildDir\gen\com\node\control\R.java"
 )
 & javac --release 8 -cp $AndroidJar -d "$BuildDir\obj" $JavaSources
