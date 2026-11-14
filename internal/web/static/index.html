@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Node - Управление Сервером</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Node - Панель Управления Сервером</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,7 +12,12 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <button id="btnBack" class="back-btn" onclick="navigateTo('dashboard')" title="Назад">←</button>
+        <button id="btnBack" class="back-btn" onclick="navigateTo('dashboard')" title="Назад">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <div class="header-title-box">
           <h1 id="headerTitle">Node</h1>
           <div id="headerSubtitle" class="header-subtitle">Клиент сервера</div>
@@ -20,15 +25,28 @@
       </div>
 
       <div class="header-actions">
-        <!-- Server Switcher Pill in the top corner -->
+        <!-- Top Spinner Ring Indicator (Moved from bottom to top, appears after 10s of no connection) -->
+        <div id="topSpinner" class="top-spinner-container" title="Поиск подключения к серверу...">
+          <div class="cyan-spinner-ring"></div>
+        </div>
+
+        <!-- Server Switcher Pill -->
         <button id="btnServerSwitcher" class="server-switcher-btn" onclick="openServerModal()" title="Переключить сервер">
           <span id="activeServerDot" class="server-status-dot"></span>
           <span id="activeServerName">Сервер...</span>
-          <span style="font-size: 10px; opacity: 0.7;">▼</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.7;">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
         </button>
 
         <!-- Refresh Button -->
-        <button id="btnGlobalRefresh" class="icon-btn" onclick="refreshCurrentView()" title="Обновить">↻</button>
+        <button id="btnGlobalRefresh" class="icon-btn" onclick="refreshCurrentView()" title="Обновить">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -37,60 +55,111 @@
 
       <!-- ================= VIEW: DASHBOARD ================= -->
       <section id="viewDashboard" class="view-panel">
-        <!-- Health Status Banner (Matching Screenshot 6) -->
+        <!-- Health Status Banner -->
         <div id="healthBanner" class="health-banner checking" onclick="checkActiveHealth()">
           <div class="health-info">
-            <div id="healthIcon" class="health-icon-box">!</div>
+            <div id="healthIcon" class="health-icon-box">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
             <div class="health-text">
               <h3 id="healthTitle">Проверка health...</h3>
               <div id="healthUrl" class="health-url">Подключение к серверу...</div>
             </div>
           </div>
-          <button class="health-refresh-btn" title="Проверить соединение">↻</button>
+          <button class="health-refresh-btn" title="Проверить соединение">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
         </div>
 
         <!-- Section Grid Title -->
-        <div class="section-heading">Разделы</div>
+        <div class="section-heading">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Разделы управления
+        </div>
 
-        <!-- Grid Cards (Files, Databases, Scripts) -->
+        <!-- Dashboard Grid (3 Columns on Desktop) -->
         <div class="dashboard-grid">
           <!-- Files -->
           <div class="dash-card" onclick="navigateTo('files')">
-            <div class="dash-icon-box dash-icon-files">📁</div>
-            <span>Файлы</span>
+            <div class="dash-icon-box dash-icon-files">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
+            <h3>Файлы</h3>
+            <p>Проводник, загрузка, скачивание и публичные ссылки</p>
           </div>
 
           <!-- Databases -->
           <div class="dash-card" onclick="navigateTo('db')">
-            <div class="dash-icon-box dash-icon-db">🗄️</div>
-            <span>Базы</span>
+            <div class="dash-icon-box dash-icon-db">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+              </svg>
+            </div>
+            <h3>Базы</h3>
+            <p>Управление СУБД PostgreSQL и MySQL, KV и SQL-запросы</p>
           </div>
 
           <!-- Scripts -->
           <div class="dash-card" onclick="navigateTo('scripts')">
-            <div class="dash-icon-box dash-icon-scripts">&lt;&nbsp;&gt;</div>
-            <span>Скрипты</span>
+            <div class="dash-icon-box dash-icon-scripts">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </div>
+            <h3>Скрипты</h3>
+            <p>Запуск Python, Node.js и Go с автоустановкой библиотек</p>
           </div>
         </div>
       </section>
 
       <!-- ================= VIEW: FILES ================= -->
       <section id="viewFiles" class="view-panel" style="display: none;">
-        <!-- Top Action Buttons (Matching Screenshot 3) -->
-        <div class="btn-row">
+        <!-- Top Action Bar -->
+        <div style="display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap;">
           <button class="btn-primary" onclick="openNewFolderModal()">
-            <span>+ Создать</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Создать папку</span>
           </button>
-          <button class="btn-outline" onclick="loadFiles()">
-            <span>↻ Обновить</span>
-          </button>
-        </div>
 
-        <div style="margin-bottom: 14px;">
-          <label class="btn-outline btn-block" style="text-align: center; cursor: pointer;">
-            <span>↑ Загрузить файл</span>
+          <label class="btn-primary" style="background-color: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); cursor: pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Загрузить файл</span>
             <input type="file" id="fileUploadInput" onchange="uploadSelectedFile()" style="display: none;">
           </label>
+
+          <button class="btn-outline" onclick="loadFiles()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Обновить</span>
+          </button>
         </div>
 
         <!-- Breadcrumbs -->
@@ -103,8 +172,11 @@
 
         <!-- Empty State -->
         <div id="filesEmptyState" class="empty-state" style="display: none;">
-          <div class="empty-icon">📂⃠</div>
-          <p>Нет файлов и папок</p>
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            <line x1="2" y1="2" x2="22" y2="22"></line>
+          </svg>
+          <p>В этой папке пока нет файлов</p>
         </div>
       </section>
 
@@ -112,36 +184,60 @@
       <section id="viewDb" class="view-panel" style="display: none;">
         <!-- Driver Selection Tabs -->
         <div class="tabs-container">
-          <button id="tabPg" class="tab-btn active" onclick="switchDbDriver('postgres')">PostgreSQL</button>
-          <button id="tabMysql" class="tab-btn" onclick="switchDbDriver('mysql')">MySQL</button>
+          <button id="tabPg" class="tab-btn active" onclick="switchDbDriver('postgres')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            PostgreSQL
+          </button>
+          <button id="tabMysql" class="tab-btn" onclick="switchDbDriver('mysql')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            MySQL
+          </button>
         </div>
 
         <!-- Database Settings Toggle -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-          <button class="btn-outline" style="padding: 6px 14px; font-size: 12px;" onclick="toggleDbConfigModal()">
-            ⚙️ Параметры подключения
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+          <button class="btn-outline" onclick="toggleDbConfigModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Параметры подключения</span>
           </button>
-          <button class="btn-outline" style="padding: 6px 14px; font-size: 12px;" onclick="openCreateDbModal()">
-            + Создать БД
+          <button class="btn-primary" onclick="openCreateDbModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Создать БД</span>
           </button>
         </div>
 
-        <!-- DB Sub-mode Tabs: Key-Value Form (Screenshot 2) & SQL Console -->
-        <div class="tabs-container" style="background: rgba(255,255,255,0.03);">
+        <!-- DB Sub-mode Tabs -->
+        <div class="tabs-container" style="background: rgba(255,255,255,0.02);">
           <button id="subTabKV" class="tab-btn active" onclick="switchDbSubTab('kv')">Запись / Чтение</button>
           <button id="subTabSQL" class="tab-btn" onclick="switchDbSubTab('sql')">SQL Консоль</button>
         </div>
 
-        <!-- KV Panel (Exact match of Screenshot 2) -->
+        <!-- KV Panel -->
         <div id="panelDbKV">
-          <div class="form-group">
-            <label class="form-label">Имя базы</label>
-            <input type="text" id="dbNameInput" class="form-control" value="postgres" placeholder="Название базы">
-          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label class="form-label">Имя базы</label>
+              <input type="text" id="dbNameInput" class="form-control" value="postgres" placeholder="Название базы">
+            </div>
 
-          <div class="form-group">
-            <label class="form-label">Путь (Ключ / Таблица)</label>
-            <input type="text" id="dbPathInput" class="form-control" placeholder="Ключ или путь (напр. config/user)">
+            <div class="form-group">
+              <label class="form-label">Путь (Ключ / Таблица)</label>
+              <input type="text" id="dbPathInput" class="form-control" placeholder="Ключ или путь (напр. config/user)">
+            </div>
           </div>
 
           <div class="form-group">
@@ -153,107 +249,147 @@
           <div class="checkbox-row">
             <label class="checkbox-label">
               <input type="checkbox" id="dbMergeCheck">
-              <span>Merge</span>
+              <span>Merge (Слияние)</span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="dbForceCheck">
-              <span>Force</span>
+              <span>Force (Перезапись)</span>
             </label>
           </div>
 
           <!-- Action Buttons -->
           <div class="btn-row">
             <button class="btn-primary" onclick="dbReadKV()">
-              <span>↓ Читать</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <polyline points="19 12 12 19 5 12"></polyline>
+              </svg>
+              <span>Читать</span>
             </button>
             <button class="btn-primary" onclick="dbWriteKV()">
-              <span>↑ Записать</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5"></line>
+                <polyline points="5 12 12 5 19 12"></polyline>
+              </svg>
+              <span>Записать</span>
+            </button>
+            <button class="btn-danger-outline" onclick="dbDeleteKV()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Удалить</span>
             </button>
           </div>
-
-          <button class="btn-danger-outline btn-block" onclick="dbDeleteKV()">
-            <span>🗑 Удалить</span>
-          </button>
         </div>
 
         <!-- SQL Console Panel -->
         <div id="panelDbSQL" style="display: none;">
           <div class="form-group">
             <label class="form-label">SQL Запрос</label>
-            <textarea id="dbSqlQueryInput" class="form-control" rows="4" placeholder="SELECT * FROM node_kv;"></textarea>
+            <textarea id="dbSqlQueryInput" class="form-control" rows="5" placeholder="SELECT * FROM node_kv LIMIT 50;"></textarea>
           </div>
-          <button class="btn-primary btn-block" onclick="executeSqlQuery()">▶ Выполнить запрос</button>
+          <button class="btn-primary" style="margin-bottom: 16px;" onclick="executeSqlQuery()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Выполнить запрос</span>
+          </button>
           
           <div id="sqlQueryResult" class="sql-table-container" style="display: none;"></div>
         </div>
       </section>
 
-      <!-- ================= VIEW: SCRIPTS ================= -->
+      <!-- ================= VIEW: SCRIPTS (PC 2-Column Layout) ================= -->
       <section id="viewScripts" class="view-panel" style="display: none;">
-        <!-- ID Скрипта (Matching Screenshot 1) -->
-        <div class="form-group">
-          <label class="form-label">ID скрипта</label>
-          <input type="text" id="scriptIdInput" class="form-control" value="main" placeholder="ID скрипта (например: bot)">
-        </div>
+        <div class="scripts-pc-grid">
+          <!-- Left Column: Code & Configuration -->
+          <div>
+            <!-- ID Скрипта -->
+            <div class="form-group">
+              <label class="form-label">ID скрипта</label>
+              <input type="text" id="scriptIdInput" class="form-control" value="main" placeholder="ID скрипта (например: main)">
+            </div>
 
-        <!-- Language Selector -->
-        <div class="tabs-container">
-          <button id="langPy" class="tab-btn active" onclick="setScriptLang('python')">Python (.py)</button>
-          <button id="langNode" class="tab-btn" onclick="setScriptLang('nodejs')">Node.js (.js)</button>
-          <button id="langGo" class="tab-btn" onclick="setScriptLang('golang')">Golang (.go)</button>
-        </div>
+            <!-- Language Selector -->
+            <div class="tabs-container">
+              <button id="langPy" class="tab-btn active" onclick="setScriptLang('python')">Python (.py)</button>
+              <button id="langNode" class="tab-btn" onclick="setScriptLang('nodejs')">Node.js (.js)</button>
+              <button id="langGo" class="tab-btn" onclick="setScriptLang('golang')">Golang (.go)</button>
+            </div>
 
-        <!-- Script Code Editor / Upload Area -->
-        <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label class="form-label" style="margin-bottom: 0;">Код скрипта</label>
-            <label style="font-size: 12px; color: var(--cyan-primary); cursor: pointer;">
-              Загрузить файл
-              <input type="file" id="scriptUploadFile" onchange="loadScriptFromFile(event)" style="display: none;">
-            </label>
+            <!-- Script Code Editor / Upload Area -->
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label class="form-label" style="margin-bottom: 0;">Исходный код скрипта</label>
+                <label style="font-size: 13px; color: var(--cyan-primary); cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  Загрузить файл
+                  <input type="file" id="scriptUploadFile" onchange="loadScriptFromFile(event)" style="display: none;">
+                </label>
+              </div>
+              <textarea id="scriptContentInput" class="form-control" style="min-height: 220px;" placeholder="# Введите код скрипта..."></textarea>
+            </div>
+
+            <!-- Auto dependencies toggle -->
+            <div class="form-group" style="margin-bottom: 18px;">
+              <label class="checkbox-label">
+                <input type="checkbox" id="scriptAutoDeps" checked>
+                <span>Автоматически находить и скачивать недостающие зависимости (pip / npm / go mod)</span>
+              </label>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="btn-row">
+              <button id="btnScriptAction" class="btn-primary" onclick="runScript()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span id="btnScriptActionText">Запустить .py</span>
+              </button>
+              <button class="btn-outline" onclick="stopScript()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+                </svg>
+                <span>Стоп</span>
+              </button>
+            </div>
+
+            <button class="btn-outline btn-block" onclick="fetchScriptLogs()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+              <span>Получить логи</span>
+            </button>
           </div>
-          <textarea id="scriptContentInput" class="form-control" style="min-height: 140px;" placeholder="# Введите код скрипта..."></textarea>
-        </div>
 
-        <!-- Auto dependencies toggle -->
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label class="checkbox-label">
-            <input type="checkbox" id="scriptAutoDeps" checked>
-            <span>Автоматически устанавливать недостающие зависимости (pip / npm / go mod)</span>
-          </label>
-        </div>
-
-        <!-- Row: Загрузить/Сохранить & Стоп -->
-        <div class="btn-row">
-          <button id="btnScriptAction" class="btn-primary" onclick="runScript()">
-            <span id="btnScriptActionText">▶ Запустить .py</span>
-          </button>
-          <button class="btn-outline" onclick="stopScript()">
-            <span>■ Стоп</span>
-          </button>
-        </div>
-
-        <!-- Wide Button: Получить логи (Matching Screenshot 1) -->
-        <button class="btn-primary btn-block" style="margin-bottom: 16px;" onclick="fetchScriptLogs()">
-          <span>≡ Получить логи</span>
-        </button>
-
-        <!-- Log Card & Terminal (Matching Screenshot 1) -->
-        <div class="log-panel">
-          <div class="log-panel-header">
-            <h3>Логи</h3>
-            <span id="scriptStatusBadge" class="log-status-badge">Ожидание...</span>
+          <!-- Right Column: Live Terminal Console -->
+          <div class="log-panel">
+            <div class="log-panel-header">
+              <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                Терминал и логи
+              </h3>
+              <span id="scriptStatusBadge" class="log-status-badge">Ожидание...</span>
+            </div>
+            <div id="scriptLogsTerminal" class="log-terminal">Логи появятся здесь...</div>
           </div>
-          <div id="scriptLogsTerminal" class="log-terminal">Логи появятся здесь...</div>
         </div>
       </section>
 
     </main>
-
-    <!-- Bottom Spinner Ring Indicator (From Screenshot 6) -->
-    <div id="globalSpinner" class="bottom-spinner-container">
-      <div class="cyan-spinner-ring"></div>
-    </div>
   </div>
 
   <!-- ================= MODALS ================= -->
@@ -267,11 +403,17 @@
       </div>
 
       <!-- Server List -->
-      <div id="serverListContainer" style="margin-bottom: 20px;"></div>
+      <div id="serverListContainer" style="margin-bottom: 24px;"></div>
 
       <!-- Add Server Form -->
-      <div style="background: var(--bg-card); padding: 16px; border-radius: 14px; border: 1px solid var(--border-color);">
-        <h4 style="font-size: 14px; margin-bottom: 12px; color: var(--cyan-primary);">+ Добавить новый узел</h4>
+      <div style="background: var(--bg-card); padding: 20px; border-radius: 14px; border: 1px solid var(--border-color);">
+        <h4 style="font-size: 15px; margin-bottom: 14px; color: var(--cyan-primary); display: flex; align-items: center; gap: 8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Добавить новый узел (VPS)
+        </h4>
         <div class="form-group">
           <label class="form-label">Название сервера</label>
           <input type="text" id="newServerName" class="form-control" placeholder="Например: VPS Германия">
@@ -293,12 +435,12 @@
   <div id="modalNewFolder" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalNewFolder')">
     <div class="modal-sheet">
       <div class="modal-header">
-        <h2>Новая папка</h2>
+        <h2>Создать новую папку</h2>
         <button class="icon-btn" onclick="closeModal('modalNewFolder')">✕</button>
       </div>
       <div class="form-group">
         <label class="form-label">Название папки</label>
-        <input type="text" id="newFolderNameInput" class="form-control" placeholder="Название">
+        <input type="text" id="newFolderNameInput" class="form-control" placeholder="Название папки">
       </div>
       <button class="btn-primary btn-block" onclick="createFolder()">Создать</button>
     </div>
@@ -312,24 +454,30 @@
         <button class="icon-btn" onclick="closeModal('modalShareFile')">✕</button>
       </div>
       <div style="margin-bottom: 14px; font-size: 14px; color: var(--text-muted);" id="shareFilePrompt">
-        Публичная прямая ссылка для скачивания без пароля:
+        Прямая публичная ссылка для скачивания без пароля:
       </div>
       <div class="form-group">
         <input type="text" id="shareUrlInput" class="form-control" readonly>
       </div>
-      <button class="btn-primary btn-block" onclick="copyShareUrl()">📋 Скопировать ссылку</button>
+      <button class="btn-primary btn-block" onclick="copyShareUrl()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>Скопировать ссылку</span>
+      </button>
     </div>
   </div>
 
   <!-- Modal: Edit File -->
   <div id="modalEditFile" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalEditFile')">
-    <div class="modal-sheet">
+    <div class="modal-sheet" style="max-width: 780px;">
       <div class="modal-header">
         <h2 id="editFileTitle">Редактирование файла</h2>
         <button class="icon-btn" onclick="closeModal('modalEditFile')">✕</button>
       </div>
       <div class="form-group">
-        <textarea id="editFileContent" class="form-control" style="height: 300px;"></textarea>
+        <textarea id="editFileContent" class="form-control" style="height: 380px; font-family: monospace;"></textarea>
       </div>
       <button class="btn-primary btn-block" onclick="saveFileContent()">Сохранить изменения</button>
     </div>
@@ -342,13 +490,15 @@
         <h2>Параметры СУБД</h2>
         <button class="icon-btn" onclick="closeModal('modalDbConfig')">✕</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Хост</label>
-        <input type="text" id="dbHostInput" class="form-control" value="localhost">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Порт</label>
-        <input type="number" id="dbPortInput" class="form-control" value="5432">
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px;">
+        <div class="form-group">
+          <label class="form-label">Хост</label>
+          <input type="text" id="dbHostInput" class="form-control" value="localhost">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Порт</label>
+          <input type="number" id="dbPortInput" class="form-control" value="5432">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Пользователь</label>

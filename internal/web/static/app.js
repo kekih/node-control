@@ -8,11 +8,14 @@ let currentScriptLang = 'python';
 let currentEditingPath = '';
 let scriptLogSource = null;
 
+// Spinner & Connection state timer
+let offlineTimeout = null;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   initServers();
-  // Auto-refresh active server ping every 10s
-  setInterval(refreshHealthBanner, 10000);
+  // Auto-refresh active server ping every 5 seconds
+  setInterval(refreshHealthBanner, 5000);
 });
 
 // Navigation
@@ -59,6 +62,33 @@ function refreshCurrentView() {
   }
 }
 
+// ================= TOP SPINNER & HEALTH LOGIC =================
+// "когда подключился к серверу этот круг пропадает, а когда подключения нету 10 секунд то появляется"
+
+function setConnectedState(isConnected) {
+  const topSpinner = document.getElementById('topSpinner');
+
+  if (isConnected) {
+    // Connection established! Cancel offline timer and hide circle immediately
+    if (offlineTimeout) {
+      clearTimeout(offlineTimeout);
+      offlineTimeout = null;
+    }
+    if (topSpinner) {
+      topSpinner.style.display = 'none';
+    }
+  } else {
+    // No connection! Start 10-second timer if not already ticking
+    if (!offlineTimeout) {
+      offlineTimeout = setTimeout(() => {
+        if (topSpinner) {
+          topSpinner.style.display = 'flex';
+        }
+      }, 10000); // 10 seconds without connection
+    }
+  }
+}
+
 // ================= SERVERS MANAGEMENT =================
 
 async function initServers() {
@@ -73,6 +103,7 @@ async function initServers() {
     }
   } catch (err) {
     console.error('Ошибка загрузки списка серверов:', err);
+    setConnectedState(false);
   }
 }
 
@@ -87,7 +118,10 @@ function setActiveServerState(server) {
 }
 
 async function refreshHealthBanner() {
-  if (!activeServer) return;
+  if (!activeServer) {
+    setConnectedState(false);
+    return;
+  }
   const banner = document.getElementById('healthBanner');
   const title = document.getElementById('healthTitle');
   const urlEl = document.getElementById('healthUrl');
@@ -98,19 +132,35 @@ async function refreshHealthBanner() {
     if (res.ok) {
       const data = await res.json();
       banner.className = 'health-banner online';
-      icon.innerText = '✓';
+      icon.innerHTML = `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
       title.innerText = 'Сервер в сети: ' + activeServer.name;
       urlEl.innerText = `${activeServer.url} • ${data.os}/${data.arch} • Uptime: ${data.uptime}`;
       document.getElementById('activeServerDot').className = 'server-status-dot online';
+
+      // Connected!
+      setConnectedState(true);
     } else {
       throw new Error('Статус ' + res.status);
     }
   } catch (e) {
     banner.className = 'health-banner offline';
-    icon.innerText = '!';
+    icon.innerHTML = `
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+    `;
     title.innerText = 'Проверка health... (Недоступен)';
     urlEl.innerText = activeServer.url;
     document.getElementById('activeServerDot').className = 'server-status-dot offline';
+
+    // No connection!
+    setConnectedState(false);
   }
 }
 
@@ -145,12 +195,17 @@ function renderServerList(servers) {
       <div class="server-item-info" onclick="selectServer('${srv.id}')">
         <span class="server-status-dot ${srv.status === 'online' ? 'online' : 'offline'}"></span>
         <div class="server-item-text">
-          <h4>${escapeHtml(srv.name)} ${srv.is_active ? ' (Активный)' : ''}</h4>
-          <p>${escapeHtml(srv.url)} ${srv.ping_ms ? '• ' + srv.ping_ms + ' ms' : ''}</p>
+          <h4>${escapeHtml(srv.name)} ${srv.is_active ? '<span style="color: var(--cyan-primary); font-size:12px; margin-left:6px;">✓ Активный</span>' : ''}</h4>
+          <p>${escapeHtml(srv.url)} ${srv.ping_ms ? ' • ' + srv.ping_ms + ' ms' : ''}</p>
         </div>
       </div>
       <div>
-        <button class="btn-icon-small delete" title="Удалить сервер" onclick="deleteServer('${srv.id}', event)">🗑</button>
+        <button class="btn-icon-small delete" title="Удалить сервер" onclick="deleteServer('${srv.id}', event)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       </div>
     `;
     container.appendChild(div);
@@ -221,7 +276,7 @@ async function loadFiles(path = '') {
   currentFilesPath = path;
   const listEl = document.getElementById('fileListContainer');
   const emptyEl = document.getElementById('filesEmptyState');
-  listEl.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Загрузка файлов...</div>';
+  listEl.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 30px;">Загрузка файлов...</div>';
   emptyEl.style.display = 'none';
 
   try {
@@ -249,13 +304,13 @@ async function loadFiles(path = '') {
       const div = document.createElement('div');
       div.className = 'file-item';
       
-      const icon = item.is_dir ? '📁' : getFileIcon(item.ext);
+      const iconSvg = item.is_dir ? getFolderSvg() : getFileSvg(item.ext);
       const sizeStr = item.is_dir ? 'Папка' : formatFileSize(item.size);
       const dateStr = new Date(item.mod_time).toLocaleString();
 
       div.innerHTML = `
         <div class="file-info" onclick="${item.is_dir ? `browseFolder('${escapeJs(item.path)}')` : `openFileEditor('${escapeJs(item.path)}')`}">
-          <span class="file-icon">${icon}</span>
+          <div class="file-icon">${iconSvg}</div>
           <div class="file-details">
             <div class="file-name">${escapeHtml(item.name)}</div>
             <div class="file-meta">${sizeStr} • ${dateStr}</div>
@@ -263,18 +318,39 @@ async function loadFiles(path = '') {
         </div>
         <div class="file-actions">
           ${!item.is_dir ? `
-            <button class="btn-icon-small" title="Скачать" onclick="downloadFile('${escapeJs(item.path)}')">⬇️</button>
-            <button class="btn-icon-small" title="Поделиться файлом" onclick="shareFile('${escapeJs(item.path)}')">🔗</button>
-            <button class="btn-icon-small" title="Редактировать" onclick="openFileEditor('${escapeJs(item.path)}')">✏️</button>
+            <button class="btn-icon-small" title="Скачать" onclick="downloadFile('${escapeJs(item.path)}')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
+            <button class="btn-icon-small" title="Поделиться публичной ссылкой" onclick="shareFile('${escapeJs(item.path)}')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+            </button>
+            <button class="btn-icon-small" title="Редактировать файл" onclick="openFileEditor('${escapeJs(item.path)}')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </button>
           ` : ''}
-          <button class="btn-icon-small delete" title="Удалить" onclick="deleteFileItem('${escapeJs(item.path)}')">🗑</button>
+          <button class="btn-icon-small delete" title="Удалить" onclick="deleteFileItem('${escapeJs(item.path)}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
         </div>
       `;
       listEl.appendChild(div);
     });
 
   } catch (err) {
-    listEl.innerHTML = `<div style="color: var(--danger-text); padding: 20px; text-align: center;">Не удалось загрузить файлы: ${err.message}</div>`;
+    listEl.innerHTML = `<div style="color: var(--danger-text); padding: 30px; text-align: center;">Не удалось загрузить файлы: ${err.message}</div>`;
   }
 }
 
@@ -288,7 +364,15 @@ function renderBreadcrumbs(currentPath) {
 
   const rootSpan = document.createElement('span');
   rootSpan.className = 'breadcrumb-item';
-  rootSpan.innerText = 'Корневая папка';
+  rootSpan.innerHTML = `
+    <span style="display: inline-flex; align-items: center; gap: 5px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+      </svg>
+      Корень
+    </span>
+  `;
   rootSpan.onclick = () => browseFolder('');
   container.appendChild(rootSpan);
 
@@ -382,7 +466,6 @@ async function shareFile(filePath) {
       return;
     }
     const data = await res.json();
-    // Build direct share URL on remote agent or proxy
     const remoteUrl = activeServer ? activeServer.url.replace(/\/$/, '') : window.location.origin;
     const directShareUrl = `${remoteUrl}/share/${data.token}`;
     document.getElementById('shareUrlInput').value = directShareUrl;
@@ -552,7 +635,6 @@ async function createDatabaseSubmit() {
   }
 }
 
-// KV Read (Matching Screenshot 2)
 async function dbReadKV() {
   const payload = getDbRequestPayload();
   try {
@@ -572,7 +654,6 @@ async function dbReadKV() {
   }
 }
 
-// KV Write (Matching Screenshot 2)
 async function dbWriteKV() {
   const payload = getDbRequestPayload();
   try {
@@ -592,7 +673,6 @@ async function dbWriteKV() {
   }
 }
 
-// KV Delete (Matching Screenshot 2)
 async function dbDeleteKV() {
   if (!confirm('Вы уверены, что хотите удалить указанное значение/ключ?')) return;
   const payload = getDbRequestPayload();
@@ -614,7 +694,6 @@ async function dbDeleteKV() {
   }
 }
 
-// Execute SQL Query
 async function executeSqlQuery() {
   const query = document.getElementById('dbSqlQueryInput').value.trim();
   if (!query) return;
@@ -624,7 +703,7 @@ async function executeSqlQuery() {
 
   const resultContainer = document.getElementById('sqlQueryResult');
   resultContainer.style.display = 'block';
-  resultContainer.innerHTML = '<div style="padding: 12px; color: var(--text-muted);">Выполнение запроса...</div>';
+  resultContainer.innerHTML = '<div style="padding: 14px; color: var(--text-muted);">Выполнение запроса...</div>';
 
   try {
     const res = await fetch('/api/proxy/api/db/query', {
@@ -634,12 +713,12 @@ async function executeSqlQuery() {
     });
     const data = await res.json();
     if (!res.ok) {
-      resultContainer.innerHTML = `<div style="padding: 12px; color: var(--danger-text);">❌ ${escapeHtml(data.error)}</div>`;
+      resultContainer.innerHTML = `<div style="padding: 14px; color: var(--danger-text);">❌ ${escapeHtml(data.error)}</div>`;
       return;
     }
 
     if (data.columns && data.columns.length > 0) {
-      let tableHtml = `<div style="padding: 8px 12px; font-size: 11px; color: var(--text-muted);">${data.message} (${data.execution_ms} ms)</div>`;
+      let tableHtml = `<div style="padding: 10px 14px; font-size: 12px; color: var(--text-muted);">${data.message} (${data.execution_ms} ms)</div>`;
       tableHtml += '<table class="sql-table"><thead><tr>';
       data.columns.forEach(col => {
         tableHtml += `<th>${escapeHtml(col)}</th>`;
@@ -657,10 +736,10 @@ async function executeSqlQuery() {
       tableHtml += '</tbody></table>';
       resultContainer.innerHTML = tableHtml;
     } else {
-      resultContainer.innerHTML = `<div style="padding: 12px; color: var(--success-text);">✓ ${escapeHtml(data.message)} (${data.execution_ms} ms)</div>`;
+      resultContainer.innerHTML = `<div style="padding: 14px; color: var(--success-text);">✓ ${escapeHtml(data.message)} (${data.execution_ms} ms)</div>`;
     }
   } catch (e) {
-    resultContainer.innerHTML = `<div style="padding: 12px; color: var(--danger-text);">❌ ${e.message}</div>`;
+    resultContainer.innerHTML = `<div style="padding: 14px; color: var(--danger-text);">❌ ${e.message}</div>`;
   }
 }
 
@@ -673,7 +752,7 @@ function setScriptLang(lang) {
   document.getElementById('langGo').className = 'tab-btn ' + (lang === 'golang' ? 'active' : '');
 
   const ext = lang === 'python' ? '.py' : (lang === 'nodejs' ? '.js' : '.go');
-  document.getElementById('btnScriptActionText').innerText = `▶ Запустить ${ext}`;
+  document.getElementById('btnScriptActionText').innerText = `Запустить ${ext}`;
 
   loadCurrentScript();
 }
@@ -782,7 +861,6 @@ function startScriptLogStream(id) {
   const terminal = document.getElementById('scriptLogsTerminal');
   const badge = document.getElementById('scriptStatusBadge');
 
-  // Connect to SSE stream
   const sseUrl = `/api/proxy/api/scripts/logs/stream?id=${encodeURIComponent(id)}`;
   scriptLogSource = new EventSource(sseUrl);
 
@@ -809,7 +887,6 @@ function startScriptLogStream(id) {
   };
 
   scriptLogSource.onerror = () => {
-    // Falls back to polling if connection drops
     scriptLogSource.close();
   };
 }
@@ -841,19 +918,30 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function getFileIcon(ext) {
+// Clean Vector SVG Icons
+function getFolderSvg() {
+  return `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00c2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+    </svg>
+  `;
+}
+
+function getFileSvg(ext) {
   ext = (ext || '').toLowerCase();
-  switch (ext) {
-    case '.py': return '🐍';
-    case '.js': case '.ts': return '📜';
-    case '.go': return '🐹';
-    case '.json': return '📋';
-    case '.html': case '.css': return '🌐';
-    case '.txt': case '.md': return '📝';
-    case '.zip': case '.tar': case '.gz': return '📦';
-    case '.png': case '.jpg': case '.jpeg': case '.gif': return '🖼️';
-    default: return '📄';
-  }
+  let color = '#94a3b8';
+  if (ext === '.py') color = '#38bdf8';
+  else if (ext === '.js' || ext === '.ts') color = '#fbbf24';
+  else if (ext === '.go') color = '#00c2ff';
+  else if (ext === '.json' || ext === '.yaml' || ext === '.yml') color = '#a78bfa';
+  else if (ext === '.zip' || ext === '.tar' || ext === '.gz') color = '#f43f5e';
+
+  return `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+      <polyline points="13 2 13 9 20 9"></polyline>
+    </svg>
+  `;
 }
 
 function escapeHtml(str) {
