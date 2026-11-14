@@ -5,6 +5,7 @@ bin/
 *.dll
 *.so
 *.dylib
+android/build/
 
 # Local storage and test data
 servers.json

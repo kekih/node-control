@@ -58,10 +58,29 @@ type DBRequest struct {
 	Force    bool   `json:"force"`
 }
 
+// DBTableDataRequest represents request to view, insert, update, or delete table rows
+type DBTableDataRequest struct {
+	DBRequest
+	Table  string                 `json:"table"`
+	Limit  int                    `json:"limit"`
+	Offset int                    `json:"offset"`
+	PKCol  string                 `json:"pk_col"`
+	PKVal  interface{}            `json:"pk_val"`
+	Values map[string]interface{} `json:"values"`
+}
+
 // ScriptRunRequest represents a script launch request
 type ScriptRunRequest struct {
 	ID       string `json:"id"`       // script identifier (e.g. "main")
 	Language string `json:"language"` // "python", "nodejs", "golang"
 	Content  string `json:"content"`  // raw script code
 	AutoDeps bool   `json:"auto_deps"`// auto-install missing packages
+}
+
+// ScriptHistoryItem represents a saved snapshot in script history
+type ScriptHistoryItem struct {
+	Timestamp time.Time `json:"timestamp"`
+	FileName  string    `json:"file_name"`
+	Size      int64     `json:"size"`
+	Content   string    `json:"content,omitempty"`
 }

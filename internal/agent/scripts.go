@@ -110,6 +110,14 @@ func (sm *ScriptManager) SaveScript(id, lang, content string) (string, error) {
 		return "", err
 	}
 
+	// Save historical snapshot
+	if len(strings.TrimSpace(content)) > 0 {
+		histDir := filepath.Join(dir, "history")
+		_ = os.MkdirAll(histDir, 0755)
+		snapName := fmt.Sprintf("%s_%s%s", time.Now().Format("20060102_150405"), id, filepath.Ext(filePath))
+		_ = os.WriteFile(filepath.Join(histDir, snapName), []byte(content), 0644)
+	}
+
 	// If golang, ensure go.mod exists
 	if strings.ToLower(lang) == "golang" || strings.ToLower(lang) == "go" {
 		modPath := filepath.Join(dir, "go.mod")
@@ -120,6 +128,61 @@ func (sm *ScriptManager) SaveScript(id, lang, content string) (string, error) {
 	}
 
 	return filePath, nil
+}
+
+// DeleteScript removes script directory and cancels running job
+func (sm *ScriptManager) DeleteScript(id string) error {
+	sm.mu.Lock()
+	if job, ok := sm.jobs[id]; ok {
+		if job.Cancel != nil {
+			job.Cancel()
+		}
+		if job.Cmd != nil && job.Cmd.Process != nil {
+			_ = job.Cmd.Process.Kill()
+		}
+		delete(sm.jobs, id)
+	}
+	sm.mu.Unlock()
+
+	dir := filepath.Join(sm.baseDir, id)
+	return os.RemoveAll(dir)
+}
+
+// GetScriptHistory returns list of snapshots for script
+func (sm *ScriptManager) GetScriptHistory(id string) ([]ScriptHistoryItem, error) {
+	histDir := filepath.Join(sm.getScriptDir(id), "history")
+	var items []ScriptHistoryItem
+	entries, err := os.ReadDir(histDir)
+	if err != nil {
+		return items, nil
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if !e.IsDir() {
+			fi, err := e.Info()
+			if err == nil {
+				items = append(items, ScriptHistoryItem{
+					Timestamp: fi.ModTime(),
+					FileName:  e.Name(),
+					Size:      fi.Size(),
+				})
+			}
+		}
+	}
+	return items, nil
+}
+
+// GetScriptHistoryContent loads the content of a historic snapshot
+func (sm *ScriptManager) GetScriptHistoryContent(id, fileName string) (string, error) {
+	if strings.Contains(fileName, "..") || strings.ContainsAny(fileName, "/\\") {
+		return "", fmt.Errorf("недопустимое имя файла")
+	}
+	fp := filepath.Join(sm.getScriptDir(id), "history", fileName)
+	data, err := os.ReadFile(fp)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // GetScript retrieves script code and metadata
@@ -388,6 +451,85 @@ func (sm *ScriptManager) StreamLogs(w http.ResponseWriter, r *http.Request, id s
 			payload, _ := json.Marshal(map[string]string{"log": msg, "status": job.Status})
 			fmt.Fprintf(w, "data: %s\n\n", string(payload))
 			flusher.Flush()
+		}
+	}
+}
+
+// StreamLogsWS handles real-time WebSocket log streaming
+func (sm *ScriptManager) StreamLogsWS(ws *WSConn, id string) {
+	defer ws.Close()
+
+	sm.mu.Lock()
+	job, ok := sm.jobs[id]
+	sm.mu.Unlock()
+
+	var initialLogs string
+	status := "stopped"
+	if ok {
+		job.mu.Lock()
+		initialLogs = job.LogBuffer.String()
+		status = job.Status
+		job.mu.Unlock()
+	}
+
+	initPayload, _ := json.Marshal(map[string]interface{}{
+		"type":   "init",
+		"logs":   initialLogs,
+		"status": status,
+		"id":     id,
+	})
+	if err := ws.WriteText(string(initPayload)); err != nil {
+		return
+	}
+
+	if !ok {
+		// Keep alive waiting for client or future start
+		ws.ReadLoop()
+		return
+	}
+
+	ch := make(chan string, 100)
+	job.AddListener(ch)
+	defer job.RemoveListener(ch)
+
+	// Run ReadLoop in background to handle ping/pong and close
+	go ws.ReadLoop()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			job.mu.Lock()
+			curStatus := job.Status
+			job.mu.Unlock()
+
+			payload, _ := json.Marshal(map[string]interface{}{
+				"type":   "log",
+				"log":    msg,
+				"status": curStatus,
+				"id":     id,
+			})
+			if err := ws.WriteText(string(payload)); err != nil {
+				return
+			}
+		case <-ticker.C:
+			job.mu.Lock()
+			curStatus := job.Status
+			job.mu.Unlock()
+
+			payload, _ := json.Marshal(map[string]interface{}{
+				"type":   "status",
+				"status": curStatus,
+				"id":     id,
+			})
+			if err := ws.WriteText(string(payload)); err != nil {
+				return
+			}
 		}
 	}
 }

@@ -47,10 +47,15 @@ function navigateTo(view) {
   } else if (view === 'db') {
     backBtn.style.display = 'flex';
     subtitle.innerText = 'Базы данных';
+    loadDatabasesList();
   } else if (view === 'scripts') {
     backBtn.style.display = 'flex';
     subtitle.innerText = 'Скрипты';
     loadCurrentScript();
+    loadScriptsList();
+    const curId = document.getElementById('scriptIdInput').value.trim() || 'main';
+    loadScriptSnapshots(curId);
+    connectScriptWS(curId);
   }
 }
 
@@ -60,9 +65,12 @@ function refreshCurrentView() {
   } else if (currentView === 'files') {
     loadFiles(currentFilesPath);
   } else if (currentView === 'scripts') {
-    fetchScriptLogs();
+    const curId = document.getElementById('scriptIdInput').value.trim() || 'main';
+    connectScriptWS(curId);
+    loadScriptsList();
+    loadScriptSnapshots(curId);
   } else if (currentView === 'db') {
-    testDbConnection(true);
+    loadDatabasesList();
   }
 }
 
@@ -639,6 +647,13 @@ async function deleteFileItem(filePath) {
 
 // ================= DATABASES MANAGER =================
 
+// ================= DATABASES MANAGER =================
+let currentDbTables = [];
+let currentActiveTable = '';
+let currentTableColumns = [];
+let currentTableRows = [];
+let currentEditRowIndex = -1;
+
 function switchDbDriver(driver) {
   currentDbDriver = driver;
   document.getElementById('tabPg').className = 'tab-btn ' + (driver === 'postgres' ? 'active' : '');
@@ -653,25 +668,31 @@ function switchDbDriver(driver) {
     document.getElementById('dbUserInput').value = 'root';
     document.getElementById('dbNameInput').value = 'mysql';
   }
+  loadDatabasesList();
 }
 
 function switchDbSubTab(tab) {
   currentDbSubTab = tab;
-  document.getElementById('subTabKV').className = 'tab-btn ' + (tab === 'kv' ? 'active' : '');
+  document.getElementById('subTabTables').className = 'tab-btn ' + (tab === 'tables' ? 'active' : '');
   document.getElementById('subTabSQL').className = 'tab-btn ' + (tab === 'sql' ? 'active' : '');
+  document.getElementById('subTabKV').className = 'tab-btn ' + (tab === 'kv' ? 'active' : '');
 
-  document.getElementById('panelDbKV').style.display = tab === 'kv' ? 'block' : 'none';
+  document.getElementById('panelDbTables').style.display = tab === 'tables' ? 'block' : 'none';
   document.getElementById('panelDbSQL').style.display = tab === 'sql' ? 'block' : 'none';
+  document.getElementById('panelDbKV').style.display = tab === 'kv' ? 'block' : 'none';
 }
 
 function getDbRequestPayload() {
+  const dropdown = document.getElementById('dbSelectDropdown');
+  const selectedDb = dropdown && dropdown.value ? dropdown.value : (document.getElementById('dbNameInput').value.trim() || (currentDbDriver === 'postgres' ? 'postgres' : 'mysql'));
+
   return {
     driver: currentDbDriver,
     host: document.getElementById('dbHostInput').value.trim() || 'localhost',
     port: parseInt(document.getElementById('dbPortInput').value) || (currentDbDriver === 'postgres' ? 5432 : 3306),
     user: document.getElementById('dbUserInput').value.trim(),
     password: document.getElementById('dbPassInput').value,
-    db_name: document.getElementById('dbNameInput').value.trim() || (currentDbDriver === 'postgres' ? 'postgres' : 'mysql'),
+    db_name: selectedDb,
     path: document.getElementById('dbPathInput').value.trim(),
     value: document.getElementById('dbValueInput').value,
     merge: document.getElementById('dbMergeCheck').checked,
@@ -695,11 +716,401 @@ async function testDbConnection(silent = false) {
     if (res.ok) {
       if (!silent) alert('Успешно: ' + (data.message || 'Соединение установлено!'));
       closeModal('modalDbConfig');
+      loadDatabasesList();
     } else {
       if (!silent) alert('Ошибка соединения: ' + data.error);
     }
   } catch (e) {
     if (!silent) alert('Ошибка: ' + e.message);
+  }
+}
+
+async function loadDatabasesList() {
+  const payload = getDbRequestPayload();
+  const dropdown = document.getElementById('dbSelectDropdown');
+  if (!dropdown) return;
+
+  try {
+    const res = await nodeApiFetch('/api/db/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const dbs = await res.json();
+      dropdown.innerHTML = '';
+      if (Array.isArray(dbs) && dbs.length > 0) {
+        dbs.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.innerText = name;
+          if (name === payload.db_name) opt.selected = true;
+          dropdown.appendChild(opt);
+        });
+      } else {
+        const opt = document.createElement('option');
+        opt.value = payload.db_name;
+        opt.innerText = payload.db_name;
+        dropdown.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    console.error('Ошибка загрузки списка БД:', e);
+  }
+
+  loadTablesList();
+}
+
+function onDatabaseChange() {
+  const dropdown = document.getElementById('dbSelectDropdown');
+  if (dropdown && dropdown.value) {
+    document.getElementById('dbNameInput').value = dropdown.value;
+  }
+  loadTablesList();
+}
+
+async function dropCurrentDatabase() {
+  const dropdown = document.getElementById('dbSelectDropdown');
+  const dbName = dropdown ? dropdown.value : '';
+  if (!dbName || dbName === 'postgres' || dbName === 'mysql') {
+    alert('Нельзя удалить системную базу данных!');
+    return;
+  }
+  if (!confirm(`ВНИМАНИЕ! Вы точно хотите безвозвратно удалить базу данных "${dbName}"?`)) return;
+
+  const payload = getDbRequestPayload();
+  payload.db_name = dbName;
+
+  try {
+    const res = await nodeApiFetch('/api/db/drop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.message || 'База удалена!');
+      loadDatabasesList();
+    } else {
+      alert('Ошибка: ' + data.error);
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+async function loadTablesList() {
+  const container = document.getElementById('dbTablesContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="padding: 12px; color: var(--text-dim); font-size: 12px;">Загрузка таблиц...</div>';
+
+  const payload = getDbRequestPayload();
+  try {
+    const res = await nodeApiFetch('/api/db/tables', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      container.innerHTML = '<div style="padding: 12px; color: var(--danger-text); font-size: 12px;">Ошибка подключения к БД</div>';
+      return;
+    }
+    const tables = await res.json();
+    currentDbTables = Array.isArray(tables) ? tables : [];
+
+    if (currentDbTables.length === 0) {
+      container.innerHTML = '<div style="padding: 12px; color: var(--text-dim); font-size: 12px;">В базе нет таблиц</div>';
+      document.getElementById('activeTableName').innerText = 'Нет таблиц';
+      document.getElementById('activeTableStats').innerText = 'Создайте таблицы через SQL консоль';
+      document.getElementById('dbGridContainer').innerHTML = '<div style="padding: 30px; text-align: center; color: var(--text-muted);">В выбранной базе данных нет созданных таблиц.</div>';
+      document.getElementById('btnInsertRow').style.display = 'none';
+      document.getElementById('btnRefreshTable').style.display = 'none';
+      return;
+    }
+
+    let html = '';
+    currentDbTables.forEach(t => {
+      const isActive = t === currentActiveTable;
+      html += `
+        <div class="db-table-item ${isActive ? 'active' : ''}" onclick="selectDbTable('${escapeJs(t)}')">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="9" y1="21" x2="9" y2="9"></line>
+            </svg>
+            ${escapeHtml(t)}
+          </span>
+          <span style="font-size: 11px; opacity: 0.6;">таблица</span>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+
+    // If active table is in list, keep it, else select first
+    if (!currentDbTables.includes(currentActiveTable)) {
+      selectDbTable(currentDbTables[0]);
+    } else {
+      selectDbTable(currentActiveTable);
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="padding: 12px; color: var(--danger-text); font-size: 12px;">Ошибка: ${e.message}</div>`;
+  }
+}
+
+function selectDbTable(tableName) {
+  currentActiveTable = tableName;
+
+  // Highlight in sidebar
+  const items = document.querySelectorAll('.db-table-item');
+  items.forEach(el => {
+    if (el.innerText.includes(tableName)) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+
+  document.getElementById('activeTableName').innerHTML = `
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-primary)" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+      <line x1="3" y1="9" x2="21" y2="9"></line>
+      <line x1="9" y1="21" x2="9" y2="9"></line>
+    </svg>
+    ${escapeHtml(tableName)}
+  `;
+  document.getElementById('btnInsertRow').style.display = 'inline-flex';
+  document.getElementById('btnRefreshTable').style.display = 'inline-flex';
+
+  loadTableData(tableName);
+}
+
+function refreshCurrentTable() {
+  if (currentActiveTable) {
+    loadTableData(currentActiveTable);
+  }
+}
+
+async function loadTableData(tableName) {
+  const grid = document.getElementById('dbGridContainer');
+  grid.innerHTML = '<div style="padding: 30px; text-align: center; color: var(--text-muted);">Загрузка данных таблицы...</div>';
+
+  const payload = getDbRequestPayload();
+  const body = {
+    ...payload,
+    table: tableName,
+    limit: 100,
+    offset: 0
+  };
+
+  try {
+    const res = await nodeApiFetch('/api/db/table/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      grid.innerHTML = `<div style="padding: 24px; color: var(--danger-text);">❌ Ошибка: ${escapeHtml(data.error)}</div>`;
+      return;
+    }
+
+    currentTableColumns = data.columns || [];
+    currentTableRows = data.rows || [];
+
+    document.getElementById('activeTableStats').innerText = `Показано записей: ${currentTableRows.length} (${data.execution_ms} ms)`;
+
+    if (currentTableColumns.length === 0) {
+      grid.innerHTML = '<div style="padding: 30px; text-align: center; color: var(--text-muted);">Таблица не содержит колонок.</div>';
+      return;
+    }
+
+    let html = '<table class="db-data-grid"><thead><tr>';
+    html += '<th style="width: 90px; text-align: center;">Действия</th>';
+    currentTableColumns.forEach(col => {
+      html += `<th>${escapeHtml(col)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    if (currentTableRows.length === 0) {
+      html += `<tr><td colspan="${currentTableColumns.length + 1}" style="text-align: center; padding: 30px; color: var(--text-dim);">Таблица пуста. Нажмите "+ Добавить запись" выше.</td></tr>`;
+    } else {
+      currentTableRows.forEach((row, rIdx) => {
+        html += '<tr>';
+        html += `
+          <td style="text-align: center;">
+            <div class="db-row-actions">
+              <button class="db-action-pill edit" onclick="openEditRowModal(${rIdx})" title="Изменить строку">Изменить</button>
+              <button class="db-action-pill delete" onclick="deleteTableRow(${rIdx})" title="Удалить строку">✕</button>
+            </div>
+          </td>
+        `;
+        row.forEach(cell => {
+          const val = cell === null ? '<span style="opacity:0.35; font-style:italic;">NULL</span>' : escapeHtml(String(cell));
+          html += `<td>${val}</td>`;
+        });
+        html += '</tr>';
+      });
+    }
+
+    html += '</tbody></table>';
+    grid.innerHTML = html;
+  } catch (e) {
+    grid.innerHTML = `<div style="padding: 24px; color: var(--danger-text);">❌ Ошибка: ${e.message}</div>`;
+  }
+}
+
+// Modal: Insert Row
+function openInsertRowModal() {
+  if (!currentActiveTable || currentTableColumns.length === 0) return;
+  document.getElementById('modalInsertRowTitle').innerText = `Добавить запись в "${currentActiveTable}"`;
+
+  const container = document.getElementById('modalInsertRowFields');
+  let html = '';
+  currentTableColumns.forEach(col => {
+    html += `
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label" style="font-size: 13px;">${escapeHtml(col)}</label>
+        <input type="text" id="insert_col_${escapeHtml(col)}" class="form-control" placeholder="Значение для ${escapeHtml(col)}">
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+  openModal('modalInsertRow');
+}
+
+async function submitInsertRow() {
+  const values = {};
+  currentTableColumns.forEach(col => {
+    const el = document.getElementById(`insert_col_${col}`);
+    if (el && el.value.trim() !== '') {
+      values[col] = el.value.trim();
+    }
+  });
+
+  const payload = getDbRequestPayload();
+  const body = {
+    ...payload,
+    table: currentActiveTable,
+    values: values
+  };
+
+  try {
+    const res = await nodeApiFetch('/api/db/table/insert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeModal('modalInsertRow');
+      loadTableData(currentActiveTable);
+    } else {
+      alert('Ошибка добавления: ' + data.error);
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+// Modal: Edit Row
+function openEditRowModal(rowIndex) {
+  if (rowIndex < 0 || rowIndex >= currentTableRows.length) return;
+  currentEditRowIndex = rowIndex;
+  const row = currentTableRows[rowIndex];
+
+  document.getElementById('modalEditRowTitle').innerText = `Редактирование записи в "${currentActiveTable}"`;
+  const container = document.getElementById('modalEditRowFields');
+
+  let html = '';
+  currentTableColumns.forEach((col, cIdx) => {
+    const val = row[cIdx] !== null && row[cIdx] !== undefined ? String(row[cIdx]) : '';
+    const isPk = cIdx === 0; // First column as primary key
+    html += `
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label" style="font-size: 13px;">
+          ${escapeHtml(col)} ${isPk ? '<span style="color:var(--cyan-primary); font-size:11px;">(Идентификатор)</span>' : ''}
+        </label>
+        <input type="text" id="edit_col_${escapeHtml(col)}" class="form-control" value="${escapeHtml(val)}" ${isPk ? 'readonly style="opacity:0.75;"' : ''}>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+  openModal('modalEditRow');
+}
+
+async function submitEditRow() {
+  if (currentEditRowIndex < 0 || currentEditRowIndex >= currentTableRows.length) return;
+  const row = currentTableRows[currentEditRowIndex];
+  const pkCol = currentTableColumns[0];
+  const pkVal = row[0];
+
+  const values = {};
+  currentTableColumns.forEach((col, cIdx) => {
+    if (cIdx === 0) return; // Do not update PK itself
+    const el = document.getElementById(`edit_col_${col}`);
+    if (el) {
+      values[col] = el.value;
+    }
+  });
+
+  const payload = getDbRequestPayload();
+  const body = {
+    ...payload,
+    table: currentActiveTable,
+    pk_col: pkCol,
+    pk_val: pkVal,
+    values: values
+  };
+
+  try {
+    const res = await nodeApiFetch('/api/db/table/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeModal('modalEditRow');
+      loadTableData(currentActiveTable);
+    } else {
+      alert('Ошибка обновления: ' + data.error);
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+async function deleteTableRow(rowIndex) {
+  if (rowIndex < 0 || rowIndex >= currentTableRows.length) return;
+  const row = currentTableRows[rowIndex];
+  const pkCol = currentTableColumns[0];
+  const pkVal = row[0];
+
+  if (!confirm(`Вы действительно хотите удалить эту запись (${pkCol} = ${pkVal})?`)) return;
+
+  const payload = getDbRequestPayload();
+  const body = {
+    ...payload,
+    table: currentActiveTable,
+    pk_col: pkCol,
+    pk_val: pkVal
+  };
+
+  try {
+    const res = await nodeApiFetch('/api/db/table/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      loadTableData(currentActiveTable);
+    } else {
+      alert('Ошибка удаления: ' + data.error);
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e.message);
   }
 }
 
@@ -723,8 +1134,8 @@ async function createDatabaseSubmit() {
     const data = await res.json();
     if (res.ok) {
       alert(data.message || 'База успешно создана!');
-      document.getElementById('dbNameInput').value = name;
       closeModal('modalCreateDb');
+      loadDatabasesList();
     } else {
       alert('Ошибка: ' + data.error);
     }
@@ -842,6 +1253,50 @@ async function executeSqlQuery() {
 }
 
 // ================= SCRIPTS MANAGER =================
+let scriptIsRunning = false;
+let scriptWS = null;
+let currentViewingSnapshot = '';
+
+// Update Single Toggle Button
+function updateScriptToggleUI(isRunning, lang = currentScriptLang) {
+  scriptIsRunning = isRunning;
+  const btn = document.getElementById('btnScriptToggle');
+  const icon = document.getElementById('btnScriptToggleIcon');
+  const text = document.getElementById('btnScriptToggleText');
+  const badge = document.getElementById('scriptStatusBadge');
+
+  if (!btn) return;
+
+  const ext = lang === 'python' ? '.py' : (lang === 'nodejs' ? '.js' : '.go');
+
+  if (isRunning) {
+    btn.className = 'btn-script-toggle running';
+    btn.title = 'Остановить выполнение скрипта';
+    icon.innerHTML = '<rect x="5" y="5" width="14" height="14" rx="2"></rect>';
+    text.innerText = '■ Остановить';
+    if (badge) {
+      badge.className = 'log-status-badge running';
+      badge.innerText = 'Выполняется';
+    }
+  } else {
+    btn.className = 'btn-script-toggle idle';
+    btn.title = 'Запустить скрипт';
+    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+    text.innerText = `▶ Запустить ${ext}`;
+    if (badge) {
+      badge.className = 'log-status-badge';
+      badge.innerText = 'Остановлен';
+    }
+  }
+}
+
+function toggleScriptExecution() {
+  if (scriptIsRunning) {
+    stopScript();
+  } else {
+    runScript();
+  }
+}
 
 function setScriptLang(lang) {
   currentScriptLang = lang;
@@ -849,10 +1304,13 @@ function setScriptLang(lang) {
   document.getElementById('langNode').className = 'tab-btn ' + (lang === 'nodejs' ? 'active' : '');
   document.getElementById('langGo').className = 'tab-btn ' + (lang === 'golang' ? 'active' : '');
 
-  const ext = lang === 'python' ? '.py' : (lang === 'nodejs' ? '.js' : '.go');
-  document.getElementById('btnScriptActionText').innerText = `Запустить ${ext}`;
-
+  updateScriptToggleUI(scriptIsRunning, lang);
   loadCurrentScript();
+}
+
+function onScriptIdChange() {
+  const id = document.getElementById('scriptIdInput').value.trim() || 'main';
+  loadScriptSnapshots(id);
 }
 
 async function loadCurrentScript() {
@@ -861,27 +1319,216 @@ async function loadCurrentScript() {
     const res = await nodeApiFetch(`/api/scripts/get?id=${encodeURIComponent(id)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.content) {
+      if (data.content !== undefined) {
         document.getElementById('scriptContentInput').value = data.content;
       }
+      if (data.language) {
+        currentScriptLang = data.language;
+        document.getElementById('langPy').className = 'tab-btn ' + (data.language === 'python' ? 'active' : '');
+        document.getElementById('langNode').className = 'tab-btn ' + (data.language === 'nodejs' ? 'active' : '');
+        document.getElementById('langGo').className = 'tab-btn ' + (data.language === 'golang' ? 'active' : '');
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  loadScriptSnapshots(id);
+  connectScriptWS(id);
+}
+
+function loadScriptFromFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  handleIncomingScriptFile(file);
+}
+
+function handleIncomingScriptFile(file) {
+  const baseName = file.name.replace(/\.[^/.]+$/, "");
+  document.getElementById('scriptIdInput').value = baseName || 'main';
+
+  if (file.name.endsWith('.py')) setScriptLang('python');
+  else if (file.name.endsWith('.js') || file.name.endsWith('.ts')) setScriptLang('nodejs');
+  else if (file.name.endsWith('.go')) setScriptLang('golang');
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    document.getElementById('scriptContentInput').value = e.target.result;
+    // Auto-save into folder and snapshots
+    await saveCurrentScript();
+  };
+  reader.readAsText(file);
+}
+
+// Drag & Drop Setup
+document.addEventListener('DOMContentLoaded', () => {
+  const dropZone = document.getElementById('editorDropZone');
+  if (dropZone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('dragover');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('dragover');
+      }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        handleIncomingScriptFile(files[0]);
+      }
+    }, false);
+  }
+});
+
+async function saveCurrentScript() {
+  const id = document.getElementById('scriptIdInput').value.trim() || 'main';
+  const content = document.getElementById('scriptContentInput').value;
+
+  try {
+    const res = await nodeApiFetch('/api/scripts/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        language: currentScriptLang,
+        content,
+        auto_deps: true
+      })
+    });
+    if (res.ok) {
+      loadScriptsList();
+      loadScriptSnapshots(id);
     }
   } catch (e) {
     console.error(e);
   }
 }
 
-function loadScriptFromFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+async function deleteCurrentScript() {
+  const id = document.getElementById('scriptIdInput').value.trim() || 'main';
+  if (!confirm(`Удалить скрипт "${id}" и все его снимки?`)) return;
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    document.getElementById('scriptContentInput').value = e.target.result;
-    if (file.name.endsWith('.py')) setScriptLang('python');
-    else if (file.name.endsWith('.js') || file.name.endsWith('.ts')) setScriptLang('nodejs');
-    else if (file.name.endsWith('.go')) setScriptLang('golang');
-  };
-  reader.readAsText(file);
+  try {
+    const res = await nodeApiFetch('/api/scripts/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    if (res.ok) {
+      document.getElementById('scriptIdInput').value = 'main';
+      document.getElementById('scriptContentInput').value = '';
+      loadScriptsList();
+      loadScriptSnapshots('main');
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+async function loadScriptsList() {
+  const container = document.getElementById('savedScriptsChips');
+  if (!container) return;
+
+  try {
+    const res = await nodeApiFetch('/api/scripts/list');
+    if (res.ok) {
+      const list = await res.json();
+      if (!Array.isArray(list) || list.length === 0) {
+        container.innerHTML = '<div style="font-size: 12px; color: var(--text-dim);">Нет сохраненных скриптов</div>';
+        return;
+      }
+
+      let html = '';
+      const currentId = document.getElementById('scriptIdInput').value.trim();
+      list.forEach(item => {
+        const isActive = item.id === currentId;
+        const statusDot = item.status === 'running' ? '🟢' : '⚪';
+        html += `
+          <div class="script-chip ${isActive ? 'active' : ''}" onclick="selectSavedScript('${escapeJs(item.id)}', '${escapeJs(item.language)}')">
+            <span>${statusDot} ${escapeHtml(item.id)}</span>
+            <span class="script-chip-badge ${escapeHtml(item.language)}">${escapeHtml(item.language)}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function selectSavedScript(id, lang) {
+  document.getElementById('scriptIdInput').value = id;
+  setScriptLang(lang);
+  loadCurrentScript();
+}
+
+async function loadScriptSnapshots(id) {
+  const container = document.getElementById('scriptSnapshotsChips');
+  if (!container) return;
+
+  try {
+    const res = await nodeApiFetch(`/api/scripts/history?id=${encodeURIComponent(id)}`);
+    if (res.ok) {
+      const items = await res.json();
+      if (!Array.isArray(items) || items.length === 0) {
+        container.innerHTML = '<div style="font-size: 12px; color: var(--text-dim);">История версий пуста</div>';
+        return;
+      }
+
+      let html = '';
+      items.forEach(item => {
+        const dateStr = new Date(item.timestamp).toLocaleString('ru-RU', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        html += `
+          <div class="script-chip" onclick="openSnapshot('${escapeJs(id)}', '${escapeJs(item.file_name)}')" title="Просмотреть снимок">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 14 14"></polyline>
+            </svg>
+            <span>${escapeHtml(dateStr)}</span>
+            <span style="font-size: 10px; opacity: 0.6;">${formatFileSize(item.size)}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function openSnapshot(id, fileName) {
+  currentViewingSnapshot = fileName;
+  try {
+    const res = await nodeApiFetch(`/api/scripts/history/content?id=${encodeURIComponent(id)}&file=${encodeURIComponent(fileName)}`);
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('modalSnapshotTitle').innerText = `Снимок: ${fileName}`;
+      document.getElementById('modalSnapshotContent').value = data.content;
+      openModal('modalViewSnapshot');
+    }
+  } catch (e) {
+    alert('Ошибка загрузки снимка: ' + e.message);
+  }
+}
+
+function restoreCurrentSnapshot() {
+  const content = document.getElementById('modalSnapshotContent').value;
+  document.getElementById('scriptContentInput').value = content;
+  closeModal('modalViewSnapshot');
+  saveCurrentScript();
+  alert('Версия восстановлена!');
 }
 
 async function runScript() {
@@ -890,10 +1537,8 @@ async function runScript() {
   const autoDeps = document.getElementById('scriptAutoDeps').checked;
 
   const terminal = document.getElementById('scriptLogsTerminal');
-  const badge = document.getElementById('scriptStatusBadge');
-  terminal.innerText = 'Запуск скрипта...\n';
-  badge.className = 'log-status-badge running';
-  badge.innerText = 'Запуск...';
+  terminal.innerText = `[Node] 🚀 Запуск скрипта '${id}'...\n`;
+  updateScriptToggleUI(true, currentScriptLang);
 
   try {
     const res = await nodeApiFetch('/api/scripts/run', {
@@ -909,90 +1554,107 @@ async function runScript() {
 
     if (!res.ok) {
       const err = await res.json();
-      terminal.innerText += `Ошибка: ${err.error}\n`;
-      badge.className = 'log-status-badge';
-      badge.innerText = 'Ошибка';
+      terminal.innerText += `❌ Ошибка: ${err.error}\n`;
+      updateScriptToggleUI(false, currentScriptLang);
       return;
     }
 
-    startScriptLogStream(id);
+    connectScriptWS(id);
+    loadScriptsList();
+    loadScriptSnapshots(id);
   } catch (e) {
-    terminal.innerText += `Ошибка запроса: ${e.message}\n`;
-    badge.className = 'log-status-badge';
-    badge.innerText = 'Ошибка';
+    terminal.innerText += `❌ Ошибка запроса: ${e.message}\n`;
+    updateScriptToggleUI(false, currentScriptLang);
   }
 }
 
 async function stopScript() {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
+  const terminal = document.getElementById('scriptLogsTerminal');
+  terminal.innerText += `\n[Node] ⚠️ Остановка процесса...\n`;
+
   try {
     await nodeApiFetch('/api/scripts/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
     });
-    document.getElementById('scriptStatusBadge').className = 'log-status-badge';
-    document.getElementById('scriptStatusBadge').innerText = 'Остановлен';
+    updateScriptToggleUI(false, currentScriptLang);
+    loadScriptsList();
   } catch (e) {
     console.error(e);
   }
 }
 
-async function fetchScriptLogs() {
-  const id = document.getElementById('scriptIdInput').value.trim() || 'main';
-  try {
-    const res = await nodeApiFetch(`/api/scripts/logs?id=${encodeURIComponent(id)}`);
-    if (res.ok) {
-      const data = await res.json();
-      document.getElementById('scriptLogsTerminal').innerText = data.logs || 'Логи пусты.';
-    }
-  } catch (e) {
-    console.error(e);
-  }
+function clearTerminalLogs() {
+  document.getElementById('scriptLogsTerminal').innerText = '';
 }
 
-function startScriptLogStream(id) {
-  if (scriptLogSource) {
-    scriptLogSource.close();
+// WebSocket Real-time Log Streaming
+function connectScriptWS(id) {
+  if (scriptWS) {
+    try { scriptWS.close(); } catch (_) {}
+    scriptWS = null;
   }
 
   const terminal = document.getElementById('scriptLogsTerminal');
   const badge = document.getElementById('scriptStatusBadge');
 
-  let sseUrl = '';
+  let wsUrl = '';
   if (isDirectMode && activeServer) {
-    sseUrl = `${activeServer.url.replace(/\/$/, '')}/api/scripts/logs/stream?id=${encodeURIComponent(id)}&secret=${encodeURIComponent(activeServer.secret || '')}`;
+    const base = activeServer.url.replace(/^http/, 'ws').replace(/\/$/, '');
+    wsUrl = `${base}/api/scripts/ws?id=${encodeURIComponent(id)}&secret=${encodeURIComponent(activeServer.secret || '')}`;
   } else {
-    sseUrl = `/api/proxy/api/scripts/logs/stream?id=${encodeURIComponent(id)}`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl = `${protocol}//${window.location.host}/api/proxy/api/scripts/ws?id=${encodeURIComponent(id)}`;
   }
 
-  scriptLogSource = new EventSource(sseUrl);
+  try {
+    scriptWS = new WebSocket(wsUrl);
 
-  scriptLogSource.addEventListener('init', (e) => {
-    terminal.innerText = e.data ? e.data.replace(/\\n/g, '\n') : '';
-    terminal.scrollTop = terminal.scrollHeight;
-  });
+    scriptWS.onopen = () => {
+      // WebSocket connected
+    };
 
-  scriptLogSource.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      if (data.log) {
-        terminal.innerText += data.log;
+    scriptWS.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'init') {
+          terminal.innerText = data.logs || 'Логи пусты.\n';
+          terminal.scrollTop = terminal.scrollHeight;
+          const isRun = data.status === 'running' || data.status === 'installing_deps' || data.status === 'starting';
+          updateScriptToggleUI(isRun, currentScriptLang);
+        } else if (data.type === 'log') {
+          if (data.log) {
+            terminal.innerText += data.log;
+            terminal.scrollTop = terminal.scrollHeight;
+          }
+          if (data.status) {
+            const isRun = data.status === 'running' || data.status === 'installing_deps' || data.status === 'starting';
+            updateScriptToggleUI(isRun, currentScriptLang);
+          }
+        } else if (data.type === 'status') {
+          if (data.status) {
+            const isRun = data.status === 'running' || data.status === 'installing_deps' || data.status === 'starting';
+            updateScriptToggleUI(isRun, currentScriptLang);
+          }
+        }
+      } catch (err) {
+        terminal.innerText += event.data;
         terminal.scrollTop = terminal.scrollHeight;
       }
-      if (data.status) {
-        badge.innerText = data.status === 'running' ? 'Выполняется' : (data.status === 'installing_deps' ? 'Зависимости...' : data.status);
-        badge.className = 'log-status-badge ' + (data.status === 'running' ? 'running' : '');
-      }
-    } catch (_) {
-      terminal.innerText += e.data + '\n';
-      terminal.scrollTop = terminal.scrollHeight;
-    }
-  };
+    };
 
-  scriptLogSource.onerror = () => {
-    scriptLogSource.close();
-  };
+    scriptWS.onerror = (e) => {
+      // Fallback: poll or do nothing
+    };
+
+    scriptWS.onclose = () => {
+      // Closed cleanly
+    };
+  } catch (err) {
+    console.error('WebSocket connection error:', err);
+  }
 }
 
 // ================= MODAL HELPERS =================

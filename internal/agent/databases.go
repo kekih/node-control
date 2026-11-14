@@ -469,3 +469,144 @@ func (dm *DBManager) KVDelete(req DBRequest) error {
 	_, err = db.Exec(query, key)
 	return err
 }
+
+// GetTableData loads rows from a specific table with columns
+func (dm *DBManager) GetTableData(req DBRequest, table string, limit, offset int) (*QueryResult, error) {
+	if strings.ContainsAny(table, " ;'\"\\-/*") {
+		return nil, fmt.Errorf("недопустимое имя таблицы: %s", table)
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	driver, _ := dm.buildDSN(req, req.DBName)
+	var query string
+	if driver == "postgres" {
+		query = fmt.Sprintf("SELECT * FROM \"%s\" LIMIT %d OFFSET %d;", table, limit, offset)
+	} else {
+		query = fmt.Sprintf("SELECT * FROM `%s` LIMIT %d OFFSET %d;", table, limit, offset)
+	}
+	return dm.ExecuteQuery(req, query)
+}
+
+// UpdateTableRow updates a specific row by primary key
+func (dm *DBManager) UpdateTableRow(req DBRequest, table, pkCol string, pkVal interface{}, values map[string]interface{}) error {
+	if strings.ContainsAny(table, " ;'\"\\-/*") || strings.ContainsAny(pkCol, " ;'\"\\-/*") {
+		return fmt.Errorf("недопустимое имя таблицы или столбца")
+	}
+
+	db, err := dm.openConn(req, req.DBName)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	driver, _ := dm.buildDSN(req, req.DBName)
+	var setClauses []string
+	var args []interface{}
+	idx := 1
+
+	for col, val := range values {
+		if strings.ContainsAny(col, " ;'\"\\-/*") {
+			continue
+		}
+		if driver == "postgres" {
+			setClauses = append(setClauses, fmt.Sprintf("\"%s\" = $%d", col, idx))
+		} else {
+			setClauses = append(setClauses, fmt.Sprintf("`%s` = ?", col))
+		}
+		args = append(args, val)
+		idx++
+	}
+
+	if len(setClauses) == 0 {
+		return fmt.Errorf("нет данных для обновления")
+	}
+
+	var query string
+	if driver == "postgres" {
+		query = fmt.Sprintf("UPDATE \"%s\" SET %s WHERE \"%s\" = $%d;", table, strings.Join(setClauses, ", "), pkCol, idx)
+	} else {
+		query = fmt.Sprintf("UPDATE `%s` SET %s WHERE `%s` = ?;", table, strings.Join(setClauses, ", "), pkCol)
+	}
+	args = append(args, pkVal)
+
+	_, err = db.Exec(query, args...)
+	return err
+}
+
+// InsertTableRow inserts a new row into table
+func (dm *DBManager) InsertTableRow(req DBRequest, table string, values map[string]interface{}) error {
+	if strings.ContainsAny(table, " ;'\"\\-/*") {
+		return fmt.Errorf("недопустимое имя таблицы: %s", table)
+	}
+
+	db, err := dm.openConn(req, req.DBName)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	driver, _ := dm.buildDSN(req, req.DBName)
+	var cols []string
+	var placeholders []string
+	var args []interface{}
+	idx := 1
+
+	for col, val := range values {
+		if strings.ContainsAny(col, " ;'\"\\-/*") {
+			continue
+		}
+		if driver == "postgres" {
+			cols = append(cols, fmt.Sprintf("\"%s\"", col))
+			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		} else {
+			cols = append(cols, fmt.Sprintf("`%s`", col))
+			placeholders = append(placeholders, "?")
+		}
+		args = append(args, val)
+		idx++
+	}
+
+	if len(cols) == 0 {
+		return fmt.Errorf("нет полей для добавления")
+	}
+
+	var query string
+	if driver == "postgres" {
+		query = fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES (%s);", table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+	} else {
+		query = fmt.Sprintf("INSERT INTO `%s` (%s) VALUES (%s);", table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+	}
+
+	_, err = db.Exec(query, args...)
+	return err
+}
+
+// DeleteTableRow deletes a row by primary key
+func (dm *DBManager) DeleteTableRow(req DBRequest, table, pkCol string, pkVal interface{}) error {
+	if strings.ContainsAny(table, " ;'\"\\-/*") || strings.ContainsAny(pkCol, " ;'\"\\-/*") {
+		return fmt.Errorf("недопустимое имя таблицы или столбца")
+	}
+
+	db, err := dm.openConn(req, req.DBName)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	driver, _ := dm.buildDSN(req, req.DBName)
+	var query string
+	if driver == "postgres" {
+		query = fmt.Sprintf("DELETE FROM \"%s\" WHERE \"%s\" = $1;", table, pkCol)
+	} else {
+		query = fmt.Sprintf("DELETE FROM `%s` WHERE `%s` = ?;", table, pkCol)
+	}
+
+	_, err = db.Exec(query, pkVal)
+	return err
+}
+

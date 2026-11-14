@@ -99,6 +99,10 @@ func (h *AgentHandler) registerRoutes() {
 	h.mux.HandleFunc("/api/db/drop", h.handleDBDrop)
 	h.mux.HandleFunc("/api/db/tables", h.handleDBTables)
 	h.mux.HandleFunc("/api/db/query", h.handleDBQuery)
+	h.mux.HandleFunc("/api/db/table/data", h.handleDBTableData)
+	h.mux.HandleFunc("/api/db/table/update", h.handleDBTableUpdate)
+	h.mux.HandleFunc("/api/db/table/insert", h.handleDBTableInsert)
+	h.mux.HandleFunc("/api/db/table/delete", h.handleDBTableDelete)
 	h.mux.HandleFunc("/api/db/kv/read", h.handleDBKVRead)
 	h.mux.HandleFunc("/api/db/kv/write", h.handleDBKVWrite)
 	h.mux.HandleFunc("/api/db/kv/delete", h.handleDBKVDelete)
@@ -107,10 +111,14 @@ func (h *AgentHandler) registerRoutes() {
 	h.mux.HandleFunc("/api/scripts/list", h.handleScriptsList)
 	h.mux.HandleFunc("/api/scripts/get", h.handleScriptsGet)
 	h.mux.HandleFunc("/api/scripts/save", h.handleScriptsSave)
+	h.mux.HandleFunc("/api/scripts/delete", h.handleScriptsDelete)
+	h.mux.HandleFunc("/api/scripts/history", h.handleScriptsHistory)
+	h.mux.HandleFunc("/api/scripts/history/content", h.handleScriptsHistoryContent)
 	h.mux.HandleFunc("/api/scripts/run", h.handleScriptsRun)
 	h.mux.HandleFunc("/api/scripts/stop", h.handleScriptsStop)
 	h.mux.HandleFunc("/api/scripts/logs", h.handleScriptsLogs)
 	h.mux.HandleFunc("/api/scripts/logs/stream", h.handleScriptsLogsStream)
+	h.mux.HandleFunc("/api/scripts/ws", h.handleScriptsWS)
 }
 
 // Helpers
@@ -465,6 +473,59 @@ func (h *AgentHandler) handleScriptsStop(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Скрипт остановлен", "id": body.ID})
 }
 
+func (h *AgentHandler) handleDBTableData(w http.ResponseWriter, r *http.Request) {
+	var req DBTableDataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	res, err := h.db.GetTableData(req.DBRequest, req.Table, req.Limit, req.Offset)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *AgentHandler) handleDBTableUpdate(w http.ResponseWriter, r *http.Request) {
+	var req DBTableDataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.db.UpdateTableRow(req.DBRequest, req.Table, req.PKCol, req.PKVal, req.Values); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Запись успешно обновлена"})
+}
+
+func (h *AgentHandler) handleDBTableInsert(w http.ResponseWriter, r *http.Request) {
+	var req DBTableDataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.db.InsertTableRow(req.DBRequest, req.Table, req.Values); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Запись успешно добавлена"})
+}
+
+func (h *AgentHandler) handleDBTableDelete(w http.ResponseWriter, r *http.Request) {
+	var req DBTableDataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.db.DeleteTableRow(req.DBRequest, req.Table, req.PKCol, req.PKVal); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Запись успешно удалена"})
+}
+
 func (h *AgentHandler) handleScriptsLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -480,4 +541,61 @@ func (h *AgentHandler) handleScriptsLogsStream(w http.ResponseWriter, r *http.Re
 		id = "main"
 	}
 	h.scripts.StreamLogs(w, r, id)
+}
+
+func (h *AgentHandler) handleScriptsDelete(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.ID == "" {
+		writeError(w, http.StatusBadRequest, "ID скрипта обязателен")
+		return
+	}
+	if err := h.scripts.DeleteScript(body.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Скрипт удален", "id": body.ID})
+}
+
+func (h *AgentHandler) handleScriptsHistory(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		id = "main"
+	}
+	items, err := h.scripts.GetScriptHistory(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *AgentHandler) handleScriptsHistoryContent(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	file := r.URL.Query().Get("file")
+	if id == "" || file == "" {
+		writeError(w, http.StatusBadRequest, "Параметры id и file обязательны")
+		return
+	}
+	content, err := h.scripts.GetScriptHistoryContent(id, file)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "file": file, "content": content})
+}
+
+func (h *AgentHandler) handleScriptsWS(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		id = "main"
+	}
+	ws, err := UpgradeWebSocket(w, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.scripts.StreamLogsWS(ws, id)
 }
