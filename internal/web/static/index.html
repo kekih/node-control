@@ -9,44 +9,46 @@
 <body>
 
   <div class="app-container">
-    <!-- Header -->
+    <!-- Header Edge-to-Edge -->
     <header class="app-header">
-      <div class="header-left">
-        <button id="btnBack" class="back-btn" onclick="navigateTo('dashboard')" title="Назад">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </button>
-        <div class="header-title-box">
-          <h1 id="headerTitle">Node</h1>
-          <div id="headerSubtitle" class="header-subtitle">Клиент сервера</div>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <!-- Top Spinner Ring Indicator (Moved from bottom to top, appears after 10s of no connection) -->
-        <div id="topSpinner" class="top-spinner-container" title="Поиск подключения к серверу...">
-          <div class="cyan-spinner-ring"></div>
+      <div class="header-inner">
+        <div class="header-left">
+          <button id="btnBack" class="back-btn" onclick="navigateTo('dashboard')" title="Назад">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+          <div class="header-title-box">
+            <h1 id="headerTitle">Node</h1>
+            <div id="headerSubtitle" class="header-subtitle">Панель управления сервером</div>
+          </div>
         </div>
 
-        <!-- Server Switcher Pill -->
-        <button id="btnServerSwitcher" class="server-switcher-btn" onclick="openServerModal()" title="Переключить сервер">
-          <span id="activeServerDot" class="server-status-dot"></span>
-          <span id="activeServerName">Сервер...</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.7;">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
+        <div class="header-actions">
+          <!-- Top Spinner Indicator (Appears when no connection for 10s) -->
+          <div id="topSpinner" class="top-spinner-container" title="Поиск подключения к серверу...">
+            <div class="cyan-spinner-ring"></div>
+          </div>
 
-        <!-- Refresh Button -->
-        <button id="btnGlobalRefresh" class="icon-btn" onclick="refreshCurrentView()" title="Обновить">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </button>
+          <!-- Server Switcher Pill -->
+          <button id="btnServerSwitcher" class="server-switcher-btn" onclick="openServerModal()" title="Переключить узел">
+            <span id="activeServerDot" class="server-status-dot"></span>
+            <span id="activeServerName">Сервер...</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.7;">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <!-- Refresh Button -->
+          <button id="btnGlobalRefresh" class="icon-btn" onclick="refreshCurrentView()" title="Обновить">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -59,7 +61,7 @@
         <div id="healthBanner" class="health-banner checking" onclick="checkActiveHealth()">
           <div class="health-info">
             <div id="healthIcon" class="health-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -71,7 +73,7 @@
             </div>
           </div>
           <button class="health-refresh-btn" title="Проверить соединение">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -94,38 +96,71 @@
         <div class="dashboard-grid">
           <!-- Files -->
           <div class="dash-card" onclick="navigateTo('files')">
-            <div class="dash-icon-box dash-icon-files">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              </svg>
+            <div>
+              <div class="dash-card-header">
+                <div class="dash-icon-box dash-icon-files">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </div>
+                <span class="dash-card-tag">Проводник & Шеринг</span>
+              </div>
+              <div class="dash-card-body">
+                <h3>Файлы</h3>
+                <p>Управление файловой системой, загрузка, скачивание и создание публичных прямых ссылок без авторизации.</p>
+              </div>
             </div>
-            <h3>Файлы</h3>
-            <p>Проводник, загрузка, скачивание и публичные ссылки</p>
+            <div class="dash-card-footer">
+              <span>Открыть менеджер файлов</span>
+              <span>→</span>
+            </div>
           </div>
 
           <!-- Databases -->
           <div class="dash-card" onclick="navigateTo('db')">
-            <div class="dash-icon-box dash-icon-db">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-              </svg>
+            <div>
+              <div class="dash-card-header">
+                <div class="dash-icon-box dash-icon-db">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                  </svg>
+                </div>
+                <span class="dash-card-tag">PostgreSQL & MySQL</span>
+              </div>
+              <div class="dash-card-body">
+                <h3>Базы</h3>
+                <p>Создание и удаление баз данных, редактирование записей в формате ключ-значение и исполнение SQL-запросов.</p>
+              </div>
             </div>
-            <h3>Базы</h3>
-            <p>Управление СУБД PostgreSQL и MySQL, KV и SQL-запросы</p>
+            <div class="dash-card-footer">
+              <span>Перейти к базам данных</span>
+              <span>→</span>
+            </div>
           </div>
 
           <!-- Scripts -->
           <div class="dash-card" onclick="navigateTo('scripts')">
-            <div class="dash-icon-box dash-icon-scripts">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="16 18 22 12 16 6"></polyline>
-                <polyline points="8 6 2 12 8 18"></polyline>
-              </svg>
+            <div>
+              <div class="dash-card-header">
+                <div class="dash-icon-box dash-icon-scripts">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 18 22 12 16 6"></polyline>
+                    <polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                </div>
+                <span class="dash-card-tag">Python • Node.js • Go</span>
+              </div>
+              <div class="dash-card-body">
+                <h3>Скрипты</h3>
+                <p>Запуск процессов с автоматической установкой недостающих зависимостей (pip, npm, go mod) и живыми логами.</p>
+              </div>
             </div>
-            <h3>Скрипты</h3>
-            <p>Запуск Python, Node.js и Go с автоустановкой библиотек</p>
+            <div class="dash-card-footer">
+              <span>Открыть консоль скриптов</span>
+              <span>→</span>
+            </div>
           </div>
         </div>
       </section>
@@ -133,7 +168,7 @@
       <!-- ================= VIEW: FILES ================= -->
       <section id="viewFiles" class="view-panel" style="display: none;">
         <!-- Top Action Bar -->
-        <div style="display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 14px; margin-bottom: 22px; flex-wrap: wrap;">
           <button class="btn-primary" onclick="openNewFolderModal()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -158,7 +193,7 @@
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            <span>Обновить</span>
+            <span>Обновить список</span>
           </button>
         </div>
 
@@ -203,7 +238,7 @@
         </div>
 
         <!-- Database Settings Toggle -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <button class="btn-outline" onclick="toggleDbConfigModal()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
@@ -228,7 +263,7 @@
 
         <!-- KV Panel -->
         <div id="panelDbKV">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div class="form-group">
               <label class="form-label">Имя базы</label>
               <input type="text" id="dbNameInput" class="form-control" value="postgres" placeholder="Название базы">
@@ -287,9 +322,9 @@
         <div id="panelDbSQL" style="display: none;">
           <div class="form-group">
             <label class="form-label">SQL Запрос</label>
-            <textarea id="dbSqlQueryInput" class="form-control" rows="5" placeholder="SELECT * FROM node_kv LIMIT 50;"></textarea>
+            <textarea id="dbSqlQueryInput" class="form-control" rows="6" placeholder="SELECT * FROM node_kv LIMIT 50;"></textarea>
           </div>
-          <button class="btn-primary" style="margin-bottom: 16px;" onclick="executeSqlQuery()">
+          <button class="btn-primary" style="margin-bottom: 20px;" onclick="executeSqlQuery()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
@@ -332,7 +367,7 @@
                   <input type="file" id="scriptUploadFile" onchange="loadScriptFromFile(event)" style="display: none;">
                 </label>
               </div>
-              <textarea id="scriptContentInput" class="form-control" style="min-height: 220px;" placeholder="# Введите код скрипта..."></textarea>
+              <textarea id="scriptContentInput" class="form-control" style="min-height: 240px;" placeholder="# Введите код скрипта..."></textarea>
             </div>
 
             <!-- Auto dependencies toggle -->
@@ -406,7 +441,7 @@
       <div id="serverListContainer" style="margin-bottom: 24px;"></div>
 
       <!-- Add Server Form -->
-      <div style="background: var(--bg-card); padding: 20px; border-radius: 14px; border: 1px solid var(--border-color);">
+      <div style="background: var(--bg-card); padding: 22px; border-radius: 14px; border: 1px solid var(--border-color);">
         <h4 style="font-size: 15px; margin-bottom: 14px; color: var(--cyan-primary); display: flex; align-items: center; gap: 8px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -471,13 +506,13 @@
 
   <!-- Modal: Edit File -->
   <div id="modalEditFile" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalEditFile')">
-    <div class="modal-sheet" style="max-width: 780px;">
+    <div class="modal-sheet" style="max-width: 840px;">
       <div class="modal-header">
         <h2 id="editFileTitle">Редактирование файла</h2>
         <button class="icon-btn" onclick="closeModal('modalEditFile')">✕</button>
       </div>
       <div class="form-group">
-        <textarea id="editFileContent" class="form-control" style="height: 380px; font-family: monospace;"></textarea>
+        <textarea id="editFileContent" class="form-control" style="height: 420px; font-family: monospace;"></textarea>
       </div>
       <button class="btn-primary btn-block" onclick="saveFileContent()">Сохранить изменения</button>
     </div>

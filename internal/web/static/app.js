@@ -11,6 +11,10 @@ let scriptLogSource = null;
 // Spinner & Connection state timer
 let offlineTimeout = null;
 
+// Direct vs Proxy mode detection
+const isDirectMode = window.location.protocol === 'file:' || 
+  (!window.location.host.includes('localhost') && !window.location.host.includes('127.0.0.1') && !window.location.port);
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   initServers();
@@ -34,7 +38,7 @@ function navigateTo(view) {
 
   if (view === 'dashboard') {
     backBtn.style.display = 'none';
-    subtitle.innerText = 'Клиент сервера';
+    subtitle.innerText = 'Панель управления сервером';
     refreshHealthBanner();
   } else if (view === 'files') {
     backBtn.style.display = 'flex';
@@ -69,7 +73,6 @@ function setConnectedState(isConnected) {
   const topSpinner = document.getElementById('topSpinner');
 
   if (isConnected) {
-    // Connection established! Cancel offline timer and hide circle immediately
     if (offlineTimeout) {
       clearTimeout(offlineTimeout);
       offlineTimeout = null;
@@ -78,7 +81,6 @@ function setConnectedState(isConnected) {
       topSpinner.style.display = 'none';
     }
   } else {
-    // No connection! Start 10-second timer if not already ticking
     if (!offlineTimeout) {
       offlineTimeout = setTimeout(() => {
         if (topSpinner) {
@@ -89,21 +91,70 @@ function setConnectedState(isConnected) {
   }
 }
 
+// API Fetch Helper: handles both PC Proxy and Mobile Direct Mode
+async function nodeApiFetch(endpoint, options = {}) {
+  options.headers = options.headers || {};
+  let url = '';
+
+  if (isDirectMode) {
+    if (!activeServer || !activeServer.url) {
+      throw new Error('Укажите URL сервера в настройках');
+    }
+    url = activeServer.url.replace(/\/$/, '') + endpoint;
+    if (activeServer.secret) {
+      options.headers['Authorization'] = 'Bearer ' + activeServer.secret;
+    }
+  } else {
+    url = '/api/proxy' + endpoint;
+  }
+
+  return fetch(url, options);
+}
+
 // ================= SERVERS MANAGEMENT =================
 
-async function initServers() {
+function getLocalServers() {
   try {
-    const res = await fetch('/api/client/servers');
-    const servers = await res.json();
-    renderServerList(servers);
-
-    const active = servers.find(s => s.is_active) || servers[0];
-    if (active) {
-      setActiveServerState(active);
+    const raw = localStorage.getItem('node_servers');
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return [
+    {
+      id: "srv_default",
+      name: "VPS Сервер (Узел 1)",
+      url: "http://127.0.0.1:9090",
+      secret: "",
+      is_active: true,
+      status: "unknown"
     }
-  } catch (err) {
-    console.error('Ошибка загрузки списка серверов:', err);
-    setConnectedState(false);
+  ];
+}
+
+function saveLocalServers(list) {
+  localStorage.setItem('node_servers', JSON.stringify(list));
+}
+
+async function initServers() {
+  let servers = [];
+  if (isDirectMode) {
+    servers = getLocalServers();
+  } else {
+    try {
+      const res = await fetch('/api/client/servers');
+      if (res.ok) {
+        servers = await res.json();
+      } else {
+        servers = getLocalServers();
+      }
+    } catch (err) {
+      servers = getLocalServers();
+    }
+  }
+
+  renderServerList(servers);
+  const active = servers.find(s => s.is_active) || servers[0];
+  if (active) {
+    setActiveServerState(active);
   }
 }
 
@@ -128,17 +179,19 @@ async function refreshHealthBanner() {
   const icon = document.getElementById('healthIcon');
 
   try {
-    const res = await fetch('/api/proxy/api/health');
+    const start = Date.now();
+    const res = await nodeApiFetch('/api/health');
     if (res.ok) {
+      const ping = Date.now() - start;
       const data = await res.json();
       banner.className = 'health-banner online';
       icon.innerHTML = `
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       `;
       title.innerText = 'Сервер в сети: ' + activeServer.name;
-      urlEl.innerText = `${activeServer.url} • ${data.os}/${data.arch} • Uptime: ${data.uptime}`;
+      urlEl.innerText = `${activeServer.url} • ${data.os}/${data.arch} • Ping: ${ping} ms • Uptime: ${data.uptime}`;
       document.getElementById('activeServerDot').className = 'server-status-dot online';
 
       // Connected!
@@ -149,7 +202,7 @@ async function refreshHealthBanner() {
   } catch (e) {
     banner.className = 'health-banner offline';
     icon.innerHTML = `
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="8" x2="12" y2="12"></line>
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -174,12 +227,16 @@ function openServerModal() {
 }
 
 async function loadServerModalList() {
+  if (isDirectMode) {
+    renderServerList(getLocalServers());
+    return;
+  }
   try {
     const res = await fetch('/api/client/servers');
     const servers = await res.json();
     renderServerList(servers);
   } catch (e) {
-    console.error(e);
+    renderServerList(getLocalServers());
   }
 }
 
@@ -213,6 +270,15 @@ function renderServerList(servers) {
 }
 
 async function selectServer(id) {
+  if (isDirectMode) {
+    const list = getLocalServers();
+    list.forEach(s => s.is_active = (s.id === id));
+    saveLocalServers(list);
+    closeModal('modalServer');
+    await initServers();
+    if (currentView === 'files') loadFiles('');
+    return;
+  }
   try {
     await fetch('/api/client/servers/active', {
       method: 'POST',
@@ -234,6 +300,26 @@ async function addNewServer() {
 
   if (!url) {
     alert('Пожалуйста, укажите URL сервера');
+    return;
+  }
+
+  if (isDirectMode) {
+    const list = getLocalServers();
+    const newSrv = {
+      id: 'srv_' + Date.now(),
+      name: name || ('Сервер ' + (list.length + 1)),
+      url,
+      secret,
+      is_active: list.length === 0,
+      status: 'unknown'
+    };
+    list.push(newSrv);
+    saveLocalServers(list);
+    document.getElementById('newServerName').value = '';
+    document.getElementById('newServerUrl').value = '';
+    document.getElementById('newServerSecret').value = '';
+    await loadServerModalList();
+    await initServers();
     return;
   }
 
@@ -261,6 +347,15 @@ async function addNewServer() {
 async function deleteServer(id, e) {
   e.stopPropagation();
   if (!confirm('Удалить этот сервер из списка?')) return;
+  if (isDirectMode) {
+    let list = getLocalServers();
+    list = list.filter(s => s.id !== id);
+    if (list.length > 0 && !list.some(s => s.is_active)) list[0].is_active = true;
+    saveLocalServers(list);
+    await loadServerModalList();
+    await initServers();
+    return;
+  }
   try {
     await fetch(`/api/client/servers?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     await loadServerModalList();
@@ -280,7 +375,7 @@ async function loadFiles(path = '') {
   emptyEl.style.display = 'none';
 
   try {
-    const res = await fetch(`/api/proxy/api/files?path=${encodeURIComponent(path)}`);
+    const res = await nodeApiFetch(`/api/files?path=${encodeURIComponent(path)}`);
     if (!res.ok) {
       throw new Error('Ошибка сервера: ' + res.status);
     }
@@ -294,7 +389,6 @@ async function loadFiles(path = '') {
     }
 
     listEl.innerHTML = '';
-    // Sort directories first
     data.items.sort((a, b) => {
       if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
       return a.is_dir ? -1 : 1;
@@ -407,7 +501,7 @@ async function createFolder() {
   const fullPath = currentFilesPath ? `${currentFilesPath}/${name}` : name;
 
   try {
-    const res = await fetch('/api/proxy/api/files/mkdir', {
+    const res = await nodeApiFetch('/api/files/mkdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: fullPath })
@@ -434,7 +528,7 @@ async function uploadSelectedFile() {
   formData.append('dir', currentFilesPath);
 
   try {
-    const res = await fetch('/api/proxy/api/files/upload', {
+    const res = await nodeApiFetch('/api/files/upload', {
       method: 'POST',
       body: formData
     });
@@ -450,12 +544,16 @@ async function uploadSelectedFile() {
 }
 
 function downloadFile(filePath) {
-  window.open(`/api/proxy/api/files/download?path=${encodeURIComponent(filePath)}`, '_blank');
+  if (isDirectMode && activeServer) {
+    window.open(`${activeServer.url.replace(/\/$/, '')}/api/files/download?path=${encodeURIComponent(filePath)}&secret=${encodeURIComponent(activeServer.secret || '')}`, '_blank');
+  } else {
+    window.open(`/api/proxy/api/files/download?path=${encodeURIComponent(filePath)}`, '_blank');
+  }
 }
 
 async function shareFile(filePath) {
   try {
-    const res = await fetch('/api/proxy/api/files/share', {
+    const res = await nodeApiFetch('/api/files/share', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: filePath })
@@ -489,7 +587,7 @@ async function openFileEditor(filePath) {
   openModal('modalEditFile');
 
   try {
-    const res = await fetch(`/api/proxy/api/files/view?path=${encodeURIComponent(filePath)}`);
+    const res = await nodeApiFetch(`/api/files/view?path=${encodeURIComponent(filePath)}`);
     if (res.ok) {
       const data = await res.json();
       document.getElementById('editFileContent').value = data.content;
@@ -504,7 +602,7 @@ async function openFileEditor(filePath) {
 async function saveFileContent() {
   const content = document.getElementById('editFileContent').value;
   try {
-    const res = await fetch('/api/proxy/api/files/save', {
+    const res = await nodeApiFetch('/api/files/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: currentEditingPath, content })
@@ -524,7 +622,7 @@ async function saveFileContent() {
 async function deleteFileItem(filePath) {
   if (!confirm(`Вы действительно хотите удалить "${filePath.split(/[\\/]/).pop()}"?`)) return;
   try {
-    const res = await fetch('/api/proxy/api/files/delete', {
+    const res = await nodeApiFetch('/api/files/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: filePath })
@@ -588,7 +686,7 @@ function toggleDbConfigModal() {
 async function testDbConnection(silent = false) {
   const payload = getDbRequestPayload();
   try {
-    const res = await fetch('/api/proxy/api/db/test', {
+    const res = await nodeApiFetch('/api/db/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -617,7 +715,7 @@ async function createDatabaseSubmit() {
   payload.db_name = name;
 
   try {
-    const res = await fetch('/api/proxy/api/db/create', {
+    const res = await nodeApiFetch('/api/db/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -638,7 +736,7 @@ async function createDatabaseSubmit() {
 async function dbReadKV() {
   const payload = getDbRequestPayload();
   try {
-    const res = await fetch('/api/proxy/api/db/kv/read', {
+    const res = await nodeApiFetch('/api/db/kv/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -657,7 +755,7 @@ async function dbReadKV() {
 async function dbWriteKV() {
   const payload = getDbRequestPayload();
   try {
-    const res = await fetch('/api/proxy/api/db/kv/write', {
+    const res = await nodeApiFetch('/api/db/kv/write', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -677,7 +775,7 @@ async function dbDeleteKV() {
   if (!confirm('Вы уверены, что хотите удалить указанное значение/ключ?')) return;
   const payload = getDbRequestPayload();
   try {
-    const res = await fetch('/api/proxy/api/db/kv/delete', {
+    const res = await nodeApiFetch('/api/db/kv/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -706,7 +804,7 @@ async function executeSqlQuery() {
   resultContainer.innerHTML = '<div style="padding: 14px; color: var(--text-muted);">Выполнение запроса...</div>';
 
   try {
-    const res = await fetch('/api/proxy/api/db/query', {
+    const res = await nodeApiFetch('/api/db/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -760,7 +858,7 @@ function setScriptLang(lang) {
 async function loadCurrentScript() {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
   try {
-    const res = await fetch(`/api/proxy/api/scripts/get?id=${encodeURIComponent(id)}`);
+    const res = await nodeApiFetch(`/api/scripts/get?id=${encodeURIComponent(id)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.content) {
@@ -798,7 +896,7 @@ async function runScript() {
   badge.innerText = 'Запуск...';
 
   try {
-    const res = await fetch('/api/proxy/api/scripts/run', {
+    const res = await nodeApiFetch('/api/scripts/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -828,7 +926,7 @@ async function runScript() {
 async function stopScript() {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
   try {
-    await fetch('/api/proxy/api/scripts/stop', {
+    await nodeApiFetch('/api/scripts/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -843,7 +941,7 @@ async function stopScript() {
 async function fetchScriptLogs() {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
   try {
-    const res = await fetch(`/api/proxy/api/scripts/logs?id=${encodeURIComponent(id)}`);
+    const res = await nodeApiFetch(`/api/scripts/logs?id=${encodeURIComponent(id)}`);
     if (res.ok) {
       const data = await res.json();
       document.getElementById('scriptLogsTerminal').innerText = data.logs || 'Логи пусты.';
@@ -861,7 +959,13 @@ function startScriptLogStream(id) {
   const terminal = document.getElementById('scriptLogsTerminal');
   const badge = document.getElementById('scriptStatusBadge');
 
-  const sseUrl = `/api/proxy/api/scripts/logs/stream?id=${encodeURIComponent(id)}`;
+  let sseUrl = '';
+  if (isDirectMode && activeServer) {
+    sseUrl = `${activeServer.url.replace(/\/$/, '')}/api/scripts/logs/stream?id=${encodeURIComponent(id)}&secret=${encodeURIComponent(activeServer.secret || '')}`;
+  } else {
+    sseUrl = `/api/proxy/api/scripts/logs/stream?id=${encodeURIComponent(id)}`;
+  }
+
   scriptLogSource = new EventSource(sseUrl);
 
   scriptLogSource.addEventListener('init', (e) => {
