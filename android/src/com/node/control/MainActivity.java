@@ -62,6 +62,15 @@ public class MainActivity extends Activity implements DownloadListener {
         }
 
         @JavascriptInterface
+        public String getAppVersion() {
+            try {
+                return activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName;
+            } catch (Exception e) {
+                return "1.0.4";
+            }
+        }
+
+        @JavascriptInterface
         public void downloadAndInstallApk(String url) {
             activity.openUrlInSystem(url);
         }

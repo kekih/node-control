@@ -37,8 +37,10 @@ type GitHubRelease struct {
 
 type CheckUpdateResponse struct {
 	UpdateAvailable bool          `json:"update_available"`
+	HasUpdate       bool          `json:"has_update"`
 	CurrentVersion  string        `json:"current_version"`
 	LatestVersion   string        `json:"latest_version"`
+	Version         string        `json:"version"`
 	Title           string        `json:"title"`
 	ReleaseNotes    string        `json:"release_notes"`
 	PublishedAt     string        `json:"published_at"`
@@ -97,8 +99,10 @@ func CheckGitHubUpdate(currentVer string) (*CheckUpdateResponse, error) {
 
 	return &CheckUpdateResponse{
 		UpdateAvailable: isNewer,
+		HasUpdate:       isNewer,
 		CurrentVersion:  cleanCurrent,
 		LatestVersion:   latestVer,
+		Version:         latestVer,
 		Title:           rel.Name,
 		ReleaseNotes:    rel.Body,
 		PublishedAt:     rel.PublishedAt.Format("02.01.2006 15:04"),
@@ -113,14 +117,27 @@ func isVersionNewer(latest, current string) bool {
 	lParts := parseVersionParts(latest)
 	cParts := parseVersionParts(current)
 
-	for i := 0; i < len(lParts) && i < len(cParts); i++ {
-		if lParts[i] > cParts[i] {
+	maxLen := len(lParts)
+	if len(cParts) > maxLen {
+		maxLen = len(cParts)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		l := 0
+		if i < len(lParts) {
+			l = lParts[i]
+		}
+		c := 0
+		if i < len(cParts) {
+			c = cParts[i]
+		}
+		if l > c {
 			return true
-		} else if lParts[i] < cParts[i] {
+		} else if l < c {
 			return false
 		}
 	}
-	return len(lParts) > len(cParts)
+	return false
 }
 
 func parseVersionParts(v string) []int {

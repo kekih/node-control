@@ -1909,83 +1909,63 @@ function escapeJs(str) {
 }
 
 // ================= OTA GITHUB UPDATER =================
-const CURRENT_APP_VERSION = "1.0.3";
+const DEFAULT_APP_VERSION = "1.0.4";
+let cachedAppVersion = null;
 let latestReleaseInfo = null;
 
-async function checkForOTAUpdates(silent = false) {
-  try {
-    // 1. Try local client update check endpoint first (if client manager is running)
-    let updateData = null;
+async function getCurrentAppVersion() {
+  if (cachedAppVersion) return cachedAppVersion;
+
+  // 1. Android Native Package Info
+  if (window.AndroidBridge && typeof window.AndroidBridge.getAppVersion === 'function') {
     try {
-      const res = await fetch('/api/client/update/check', { cache: 'no-store' });
-      if (res.ok) {
-        updateData = await res.json();
+      const v = window.AndroidBridge.getAppVersion();
+      if (v) {
+        cachedAppVersion = v.trim().replace(/^v/i, '');
+        return cachedAppVersion;
       }
     } catch (_) {}
-
-    // 2. If client manager endpoint not available (e.g. direct mobile / web), check GitHub API directly
-    if (!updateData || !updateData.version) {
-      const ghRes = await fetch('https://api.github.com/repos/kekih/node-control/releases/latest', {
-        headers: { 'Accept': 'application/vnd.github.v3+json' },
-        cache: 'no-store'
-      });
-      if (ghRes.ok) {
-        const gh = await ghRes.json();
-        const latestTag = (gh.tag_name || '').replace(/^v/, '');
-        const hasUpdate = isNewerVersion(CURRENT_APP_VERSION, latestTag);
-        
-        let clientAsset = null;
-        let apkAsset = null;
-        if (Array.isArray(gh.assets)) {
-          for (const asset of gh.assets) {
-            const name = asset.name || '';
-            if (name.endsWith('.exe')) clientAsset = asset.browser_download_url;
-            if (name.includes('linux-amd64') && name.includes('client')) clientAsset = asset.browser_download_url;
-            if (name.endsWith('.apk')) apkAsset = asset.browser_download_url;
-          }
-        }
-
-        updateData = {
-          has_update: hasUpdate,
-          current_version: CURRENT_APP_VERSION,
-          latest_version: latestTag,
-          version: latestTag,
-          notes: gh.body || 'Новые улучшения и исправления ошибок',
-          asset_url: clientAsset,
-          apk_url: apkAsset,
-          html_url: gh.html_url
-        };
-      }
-    }
-
-    if (updateData && (updateData.has_update || isNewerVersion(updateData.current_version || CURRENT_APP_VERSION, updateData.version || updateData.latest_version))) {
-      latestReleaseInfo = updateData;
-      const targetVer = updateData.version || updateData.latest_version;
-      const badge = document.getElementById('headerUpdateBadge');
-      const verText = document.getElementById('updateVersionText');
-      if (badge && verText) {
-        verText.innerText = 'v' + targetVer;
-        badge.style.display = 'inline-flex';
-      }
-    } else {
-      if (!silent) {
-        alert('У вас установлена самая актуальная версия: v' + CURRENT_APP_VERSION);
-      }
-    }
-  } catch (err) {
-    if (!silent) {
-      console.warn('Update check failed:', err);
-    }
   }
+
+  // 2. Desktop Native Local API: /api/client/version
+  try {
+    const res = await fetch('/api/client/version', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.version) {
+        cachedAppVersion = data.version.trim().replace(/^v/i, '');
+        return cachedAppVersion;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Static version.json file
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.version) {
+        cachedAppVersion = data.version.trim().replace(/^v/i, '');
+        return cachedAppVersion;
+      }
+    }
+  } catch (_) {}
+
+  cachedAppVersion = DEFAULT_APP_VERSION;
+  return cachedAppVersion;
 }
 
 function isNewerVersion(current, latest) {
-  if (!latest) return false;
-  current = current.replace(/^v/, '');
-  latest = latest.replace(/^v/, '');
-  const cParts = current.split('.').map(n => parseInt(n) || 0);
-  const lParts = latest.split('.').map(n => parseInt(n) || 0);
-  for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+  if (!latest || !current) return false;
+  current = current.toString().replace(/^v/i, '').trim();
+  latest = latest.toString().replace(/^v/i, '').trim();
+  if (current === latest) return false;
+
+  const cParts = current.split('.').map(n => parseInt(n, 10) || 0);
+  const lParts = latest.split('.').map(n => parseInt(n, 10) || 0);
+  const maxLen = Math.max(cParts.length, lParts.length);
+
+  for (let i = 0; i < maxLen; i++) {
     const c = cParts[i] || 0;
     const l = lParts[i] || 0;
     if (l > c) return true;
@@ -1994,17 +1974,114 @@ function isNewerVersion(current, latest) {
   return false;
 }
 
-function openUpdateModal() {
-  if (!latestReleaseInfo) return;
+async function checkForOTAUpdates(silent = false) {
+  try {
+    const currentVer = await getCurrentAppVersion();
+    let latestVer = null;
+    let releaseNotes = '';
+    let clientAsset = null;
+    let apkAsset = null;
+    let htmlUrl = 'https://github.com/kekih/node-control/releases/latest';
+
+    // 1. Direct fetch from public GitHub Releases API
+    try {
+      const ghRes = await fetch('https://api.github.com/repos/kekih/node-control/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        cache: 'no-store'
+      });
+      if (ghRes.ok) {
+        const gh = await ghRes.json();
+        latestVer = (gh.tag_name || '').replace(/^v/i, '').trim();
+        releaseNotes = gh.body || 'Новые улучшения и исправления ошибок';
+        htmlUrl = gh.html_url || htmlUrl;
+        if (Array.isArray(gh.assets)) {
+          for (const asset of gh.assets) {
+            const name = (asset.name || '').toLowerCase();
+            if (name.endsWith('.exe')) clientAsset = asset.browser_download_url;
+            if (name.includes('linux') && name.includes('client')) clientAsset = asset.browser_download_url;
+            if (name.endsWith('.apk')) apkAsset = asset.browser_download_url;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('GitHub API fetch failed:', e);
+    }
+
+    // 2. Fallback to local client proxy if GitHub was unreachable directly
+    if (!latestVer) {
+      try {
+        const res = await fetch('/api/client/update/check', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          latestVer = (data.latest_version || data.version || '').replace(/^v/i, '').trim();
+          releaseNotes = data.release_notes || releaseNotes;
+          clientAsset = data.client_asset_url || clientAsset;
+          htmlUrl = data.release_url || htmlUrl;
+        }
+      } catch (_) {}
+    }
+
+    if (!latestVer) {
+      if (!silent) alert(`Текущая версия приложения: v${currentVer}`);
+      return;
+    }
+
+    const hasUpdate = isNewerVersion(currentVer, latestVer);
+    const badge = document.getElementById('headerUpdateBadge');
+    const verText = document.getElementById('updateVersionText');
+
+    if (hasUpdate) {
+      latestReleaseInfo = {
+        has_update: true,
+        current_version: currentVer,
+        latest_version: latestVer,
+        version: latestVer,
+        notes: releaseNotes,
+        asset_url: clientAsset,
+        apk_url: apkAsset,
+        html_url: htmlUrl
+      };
+
+      if (badge && verText) {
+        verText.innerText = 'v' + latestVer;
+        badge.style.display = 'inline-flex';
+      }
+    } else {
+      if (badge) {
+        badge.style.display = 'none';
+      }
+      latestReleaseInfo = null;
+      if (!silent) {
+        alert(`У вас установлена самая актуальная версия: v${currentVer}. Обновлений не требуется.`);
+      }
+    }
+  } catch (err) {
+    if (!silent) {
+      alert('Ошибка проверки обновлений: ' + err.message);
+    }
+  }
+}
+
+async function openUpdateModal() {
+  const currentVer = await getCurrentAppVersion();
   const currentVerEl = document.getElementById('updateCurrentVer');
   const latestVerEl = document.getElementById('updateLatestVer');
   const notesEl = document.getElementById('updateChangelog');
   const manualLink = document.getElementById('btnManualUpdateLink');
+  const btnApply = document.getElementById('btnApplyUpdate');
 
-  if (currentVerEl) currentVerEl.innerText = 'v' + (latestReleaseInfo.current_version || CURRENT_APP_VERSION);
-  if (latestVerEl) latestVerEl.innerText = 'v' + (latestReleaseInfo.version || latestReleaseInfo.latest_version);
-  if (notesEl) notesEl.innerText = latestReleaseInfo.notes || 'Обновление доступно для скачивания.';
-  if (manualLink && latestReleaseInfo.html_url) manualLink.href = latestReleaseInfo.html_url;
+  if (currentVerEl) currentVerEl.innerText = 'v' + currentVer;
+
+  if (latestReleaseInfo && latestReleaseInfo.has_update) {
+    if (latestVerEl) latestVerEl.innerText = 'v' + (latestReleaseInfo.version || latestReleaseInfo.latest_version);
+    if (notesEl) notesEl.innerText = latestReleaseInfo.notes || 'Обновление доступно для скачивания.';
+    if (manualLink && latestReleaseInfo.html_url) manualLink.href = latestReleaseInfo.html_url;
+    if (btnApply) btnApply.style.display = 'inline-flex';
+  } else {
+    if (latestVerEl) latestVerEl.innerText = 'v' + currentVer;
+    if (notesEl) notesEl.innerText = 'У вас установлена самая актуальная версия приложения. Обновлений не требуется.';
+    if (btnApply) btnApply.style.display = 'none';
+  }
 
   openModal('modalUpdate');
 }

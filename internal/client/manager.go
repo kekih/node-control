@@ -73,12 +73,20 @@ func (cm *ClientManager) checkAllServers() {
 
 // RegisterRoutes sets up client server API endpoints
 func (cm *ClientManager) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/client/version", cm.handleVersion)
 	mux.HandleFunc("/api/client/servers", cm.handleServers)
 	mux.HandleFunc("/api/client/servers/active", cm.handleSetActive)
 	mux.HandleFunc("/api/client/ping", cm.handlePing)
 	mux.HandleFunc("/api/client/update/check", cm.handleUpdateCheck)
 	mux.HandleFunc("/api/client/update/apply", cm.handleUpdateApply)
 	mux.HandleFunc("/api/proxy/", cm.handleProxy)
+}
+
+func (cm *ClientManager) handleVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"version": updater.CurrentVersion,
+	})
 }
 
 func (cm *ClientManager) handleServers(w http.ResponseWriter, r *http.Request) {
