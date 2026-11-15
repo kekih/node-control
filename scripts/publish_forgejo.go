@@ -49,8 +49,17 @@ func main() {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		fmt.Printf("Create release error (status %d): %s\n", resp.StatusCode, string(respBody))
-		return
+		// Check if release already exists
+		getReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/repos/%s/%s/releases/tags/%s", serverURL, repoOwner, repoName, tag), nil)
+		getReq.Header.Set("Authorization", "token "+token)
+		getResp, err := client.Do(getReq)
+		if err == nil && getResp.StatusCode == http.StatusOK {
+			respBody, _ = io.ReadAll(getResp.Body)
+			_ = getResp.Body.Close()
+		} else {
+			fmt.Printf("Create release error (status %d): %s\n", resp.StatusCode, string(respBody))
+			return
+		}
 	}
 
 	var res struct {
