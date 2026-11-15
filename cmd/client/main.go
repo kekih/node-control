@@ -4,43 +4,23 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 
 	"node-control/internal/client"
-	"node-control/internal/native"
 	"node-control/internal/web"
 )
 
-func openBrowser(url string) {
-	var cmd string
-	var args []string
-
-	switch runtime.GOOS {
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start", url}
-	case "darwin":
-		cmd = "open"
-		args = []string{url}
-	default:
-		cmd = "xdg-open"
-		args = []string{url}
-	}
-	_ = exec.Command(cmd, args...).Start()
-}
-
 func main() {
-	webFlag := flag.Bool("web", false, "Запустить в режиме веб-сервера с браузером (по умолчанию запускается нативное приложение)")
-	portFlag := flag.String("port", "", "Порт для веб-режима (по умолчанию 8080)")
+	webFlag := flag.Bool("web", false, "Запустить как локальный веб-сервер (по умолчанию открывается нативное GUI окно)")
+	tuiFlag := flag.Bool("tui", false, "Запустить в текстовом консольном режиме (TUI)")
+	portFlag := flag.String("port", "", "Порт для режима веб-сервера (по умолчанию 8080)")
 	dataFlag := flag.String("data", "", "Папка для сохранения конфигураций (servers.json)")
-	openFlag := flag.Bool("open", true, "Автоматически открывать браузер при флаге --web")
 	flag.Parse()
 
 	dataDir := *dataFlag
@@ -55,20 +35,46 @@ func main() {
 
 	store := client.NewServerStore(dataDir)
 
-	// Если указан флаг --web, запускаем веб-сервер
 	if *webFlag {
-		runWebServer(store, *portFlag, *openFlag, dataDir)
+		runWebServer(store, *portFlag, dataDir)
 		return
 	}
 
-	// По умолчанию запускается нативное приложение (без веб-интерфейса)
-	nativeApp := native.NewNativeApp(store)
-	if err := nativeApp.Run(); err != nil {
-		log.Fatalf("[Node Client] Ошибка запуска нативного приложения: %v", err)
+	// Запуск локального бекенда на свободном порту 127.0.0.1
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatalf("[Node Client] Ошибка привязки локального порта: %v", err)
 	}
+	port := fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port)
+	localURL := fmt.Sprintf("http://127.0.0.1:%s", port)
+
+	mgr := client.NewClientManager(store)
+	mux := http.NewServeMux()
+	mgr.RegisterRoutes(mux)
+
+	fileServer := http.FileServer(web.GetFileSystem())
+	mux.Handle("/", fileServer)
+
+	server := &http.Server{
+		Handler:      mux,
+		ReadTimeout:  15 * time.Minute,
+		WriteTimeout: 15 * time.Minute,
+	}
+
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Printf("[Node Client] Сервер остановлен: %v", err)
+		}
+	}()
+
+	// Открываем нативное GUI окно рабочего стола
+	runDesktopApp(localURL, store, *tuiFlag)
+
+	// Завершение работы при закрытии окна
+	_ = server.Close()
 }
 
-func runWebServer(store *client.ServerStore, port string, autoOpen bool, dataDir string) {
+func runWebServer(store *client.ServerStore, port string, dataDir string) {
 	if port == "" {
 		port = os.Getenv("PORT")
 		if port == "" {
@@ -78,7 +84,6 @@ func runWebServer(store *client.ServerStore, port string, autoOpen bool, dataDir
 
 	mgr := client.NewClientManager(store)
 	mux := http.NewServeMux()
-
 	mgr.RegisterRoutes(mux)
 
 	fileServer := http.FileServer(web.GetFileSystem())
@@ -99,13 +104,6 @@ func runWebServer(store *client.ServerStore, port string, autoOpen bool, dataDir
 		Handler:      mux,
 		ReadTimeout:  15 * time.Minute,
 		WriteTimeout: 15 * time.Minute,
-	}
-
-	if autoOpen {
-		go func() {
-			time.Sleep(400 * time.Millisecond)
-			openBrowser(localURL)
-		}()
 	}
 
 	go func() {

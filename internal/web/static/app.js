@@ -514,6 +514,7 @@ function renderBreadcrumbs(currentPath) {
 
   if (!currentPath) return;
 
+  const isAbs = currentPath.startsWith('/');
   const parts = currentPath.split(/[\\/]/).filter(p => p.length > 0);
   let built = '';
   parts.forEach((p, idx) => {
@@ -522,7 +523,11 @@ function renderBreadcrumbs(currentPath) {
     sep.style.opacity = '0.5';
     container.appendChild(sep);
 
-    built += (idx === 0 && currentPath.startsWith('/') ? '/' : '') + p;
+    if (isAbs) {
+      built += '/' + p;
+    } else {
+      built += (idx > 0 ? '/' : '') + p;
+    }
     const itemSpan = document.createElement('span');
     itemSpan.className = 'breadcrumb-item';
     itemSpan.innerText = p;

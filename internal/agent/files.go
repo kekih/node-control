@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,16 +39,23 @@ func NewFileManager(rootDir, sharePort, publicHost string) *FileManager {
 	}
 }
 
-// resolveSafePath verifies target is within allowed root
+// resolveSafePath verifies target is within allowed root or absolute system path
 func (fm *FileManager) resolveSafePath(userPath string) (string, error) {
-	if userPath == "" || userPath == "." || userPath == "/" {
+	if userPath == "" || userPath == "." {
 		return fm.rootDir, nil
 	}
-	clean := filepath.Clean(userPath)
-	if !filepath.IsAbs(clean) {
-		clean = filepath.Join(fm.rootDir, clean)
+	// Normalize Windows slashes if server is running on Linux
+	if runtime.GOOS != "windows" {
+		userPath = strings.ReplaceAll(userPath, "\\", "/")
+	} else {
+		userPath = filepath.FromSlash(userPath)
 	}
-	return clean, nil
+
+	if filepath.IsAbs(userPath) || strings.HasPrefix(userPath, "/") {
+		return filepath.Clean(userPath), nil
+	}
+
+	return filepath.Join(fm.rootDir, filepath.Clean(userPath)), nil
 }
 
 // ListDirectory returns items in directory
@@ -69,6 +77,9 @@ func (fm *FileManager) ListDirectory(targetPath string) (*FilesListResponse, err
 			continue
 		}
 		itemPath := filepath.Join(fullPath, entry.Name())
+		if runtime.GOOS != "windows" {
+			itemPath = filepath.ToSlash(itemPath)
+		}
 		items = append(items, FileItem{
 			Name:    entry.Name(),
 			Path:    itemPath,
@@ -80,6 +91,10 @@ func (fm *FileManager) ListDirectory(targetPath string) (*FilesListResponse, err
 	}
 
 	parent := filepath.Dir(fullPath)
+	if runtime.GOOS != "windows" {
+		fullPath = filepath.ToSlash(fullPath)
+		parent = filepath.ToSlash(parent)
+	}
 	return &FilesListResponse{
 		CurrentPath: fullPath,
 		ParentPath:  parent,
