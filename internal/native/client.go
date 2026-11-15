@@ -437,6 +437,16 @@ func (a *AgentAPI) StopScript(id string) error {
 	return nil
 }
 
+func (a *AgentAPI) KillScript(id string) error {
+	payload, _ := json.Marshal(map[string]string{"id": id})
+	resp, err := a.doRequest(http.MethodPost, "/api/scripts/kill", bytes.NewReader(payload), "application/json")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 func (a *AgentAPI) GetScriptLogs(id string) (string, bool, error) {
 	resp, err := a.doRequest(http.MethodGet, "/api/scripts/logs?id="+url.QueryEscape(id), nil, "")
 	if err != nil {

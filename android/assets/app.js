@@ -48,6 +48,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initServers();
   // Auto-refresh active server ping every 5 seconds
   setInterval(refreshHealthBanner, 5000);
+  // Check for OTA updates on startup and every 60s
+  checkForOTAUpdates(true);
+  setInterval(() => checkForOTAUpdates(true), 60000);
 });
 
 // Navigation
@@ -1723,17 +1726,47 @@ async function stopScript() {
   const id = document.getElementById('scriptIdInput').value.trim() || 'main';
   const terminal = document.getElementById('scriptLogsTerminal');
   terminal.innerText += `\n[Node] ⚠️ Остановка процесса...\n`;
+  updateScriptToggleUI(false, currentScriptLang);
 
   try {
-    await nodeApiFetch('/api/scripts/stop', {
+    const res = await nodeApiFetch('/api/scripts/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
     });
-    updateScriptToggleUI(false, currentScriptLang);
+    const data = await res.json();
+    if (res.ok) {
+      terminal.innerText += `[Node] ⏹️ ${data.message || 'Скрипт остановлен'}\n`;
+    } else {
+      terminal.innerText += `[Node] ⚠️ ${data.error || 'Скрипт не был активен'}\n`;
+    }
     loadScriptsList();
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function killScriptExecution() {
+  const id = document.getElementById('scriptIdInput').value.trim() || 'main';
+  const terminal = document.getElementById('scriptLogsTerminal');
+  terminal.innerText += `\n[Node] ⚡ КРИТИЧЕСКАЯ ОСТАНОВКА ПРОЦЕССА (SIGKILL)...\n`;
+  updateScriptToggleUI(false, currentScriptLang);
+
+  try {
+    const res = await nodeApiFetch('/api/scripts/kill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      terminal.innerText += `[Node] ⚡ ${data.message || 'Процесс принудительно завершен'}\n`;
+    } else {
+      terminal.innerText += `[Node] ⚠️ ${data.error || 'Ошибка критической остановки'}\n`;
+    }
+    loadScriptsList();
+  } catch (e) {
+    terminal.innerText += `[Node] ⚠️ Ошибка сети при остановке: ${e.message}\n`;
   }
 }
 
@@ -1873,4 +1906,176 @@ function escapeHtml(str) {
 function escapeJs(str) {
   if (!str) return '';
   return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// ================= OTA GITHUB UPDATER =================
+const CURRENT_APP_VERSION = "1.0.3";
+let latestReleaseInfo = null;
+
+async function checkForOTAUpdates(silent = false) {
+  try {
+    // 1. Try local client update check endpoint first (if client manager is running)
+    let updateData = null;
+    try {
+      const res = await fetch('/api/client/update/check', { cache: 'no-store' });
+      if (res.ok) {
+        updateData = await res.json();
+      }
+    } catch (_) {}
+
+    // 2. If client manager endpoint not available (e.g. direct mobile / web), check GitHub API directly
+    if (!updateData || !updateData.version) {
+      const ghRes = await fetch('https://api.github.com/repos/kekih/node-control/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        cache: 'no-store'
+      });
+      if (ghRes.ok) {
+        const gh = await ghRes.json();
+        const latestTag = (gh.tag_name || '').replace(/^v/, '');
+        const hasUpdate = isNewerVersion(CURRENT_APP_VERSION, latestTag);
+        
+        let clientAsset = null;
+        let apkAsset = null;
+        if (Array.isArray(gh.assets)) {
+          for (const asset of gh.assets) {
+            const name = asset.name || '';
+            if (name.endsWith('.exe')) clientAsset = asset.browser_download_url;
+            if (name.includes('linux-amd64') && name.includes('client')) clientAsset = asset.browser_download_url;
+            if (name.endsWith('.apk')) apkAsset = asset.browser_download_url;
+          }
+        }
+
+        updateData = {
+          has_update: hasUpdate,
+          current_version: CURRENT_APP_VERSION,
+          latest_version: latestTag,
+          version: latestTag,
+          notes: gh.body || 'Новые улучшения и исправления ошибок',
+          asset_url: clientAsset,
+          apk_url: apkAsset,
+          html_url: gh.html_url
+        };
+      }
+    }
+
+    if (updateData && (updateData.has_update || isNewerVersion(updateData.current_version || CURRENT_APP_VERSION, updateData.version || updateData.latest_version))) {
+      latestReleaseInfo = updateData;
+      const targetVer = updateData.version || updateData.latest_version;
+      const badge = document.getElementById('headerUpdateBadge');
+      const verText = document.getElementById('updateVersionText');
+      if (badge && verText) {
+        verText.innerText = 'v' + targetVer;
+        badge.style.display = 'inline-flex';
+      }
+    } else {
+      if (!silent) {
+        alert('У вас установлена самая актуальная версия: v' + CURRENT_APP_VERSION);
+      }
+    }
+  } catch (err) {
+    if (!silent) {
+      console.warn('Update check failed:', err);
+    }
+  }
+}
+
+function isNewerVersion(current, latest) {
+  if (!latest) return false;
+  current = current.replace(/^v/, '');
+  latest = latest.replace(/^v/, '');
+  const cParts = current.split('.').map(n => parseInt(n) || 0);
+  const lParts = latest.split('.').map(n => parseInt(n) || 0);
+  for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+    const c = cParts[i] || 0;
+    const l = lParts[i] || 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+  return false;
+}
+
+function openUpdateModal() {
+  if (!latestReleaseInfo) return;
+  const currentVerEl = document.getElementById('updateCurrentVer');
+  const latestVerEl = document.getElementById('updateLatestVer');
+  const notesEl = document.getElementById('updateChangelog');
+  const manualLink = document.getElementById('btnManualUpdateLink');
+
+  if (currentVerEl) currentVerEl.innerText = 'v' + (latestReleaseInfo.current_version || CURRENT_APP_VERSION);
+  if (latestVerEl) latestVerEl.innerText = 'v' + (latestReleaseInfo.version || latestReleaseInfo.latest_version);
+  if (notesEl) notesEl.innerText = latestReleaseInfo.notes || 'Обновление доступно для скачивания.';
+  if (manualLink && latestReleaseInfo.html_url) manualLink.href = latestReleaseInfo.html_url;
+
+  openModal('modalUpdate');
+}
+
+async function startOTAUpdate() {
+  const btn = document.getElementById('btnApplyUpdate');
+  const btnText = document.getElementById('btnApplyUpdateText');
+  const progressBox = document.getElementById('updateProgressContainer');
+  const progressBar = document.getElementById('updateProgressBar');
+  const progressPercent = document.getElementById('updateProgressPercent');
+  const statusText = document.getElementById('updateStatusText');
+  const errorBox = document.getElementById('updateErrorBox');
+
+  if (errorBox) errorBox.style.display = 'none';
+
+  // 1. Check if running inside Android APK
+  const isAndroid = /Android/i.test(navigator.userAgent) || window.AndroidBridge !== undefined;
+  if (isAndroid) {
+    const apkUrl = latestReleaseInfo?.apk_url || 'https://github.com/kekih/node-control/releases/latest/download/Node.apk';
+    if (window.AndroidBridge && typeof window.AndroidBridge.downloadAndInstallApk === 'function') {
+      window.AndroidBridge.downloadAndInstallApk(apkUrl);
+      if (statusText) statusText.innerText = 'Загрузка APK файла на устройство...';
+      if (progressBox) progressBox.style.display = 'block';
+      return;
+    } else {
+      // Fallback: trigger download via window.location
+      window.location.href = apkUrl;
+      return;
+    }
+  }
+
+  // 2. Desktop native client update via /api/client/update/apply
+  if (btn) btn.disabled = true;
+  if (progressBox) progressBox.style.display = 'block';
+  if (progressBar) progressBar.style.width = '30%';
+  if (progressPercent) progressPercent.innerText = '30%';
+  if (statusText) statusText.innerText = 'Скачивание обновления с GitHub...';
+
+  try {
+    const targetVer = latestReleaseInfo?.version || latestReleaseInfo?.latest_version;
+    const assetUrl = latestReleaseInfo?.asset_url || '';
+
+    const res = await fetch('/api/client/update/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        version: targetVer,
+        asset_url: assetUrl
+      })
+    });
+
+    if (progressBar) progressBar.style.width = '80%';
+    if (progressPercent) progressPercent.innerText = '80%';
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Ошибка применения обновления');
+    }
+
+    if (progressBar) progressBar.style.width = '100%';
+    if (progressPercent) progressPercent.innerText = '100%';
+    if (statusText) statusText.innerText = 'Обновление установлено! Перезапуск клиента...';
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 2500);
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    if (errorBox) {
+      errorBox.innerText = `Не удалось выполнить автообновление: ${err.message}. Вы можете скачать файл вручную с GitHub.`;
+      errorBox.style.display = 'block';
+    }
+  }
 }

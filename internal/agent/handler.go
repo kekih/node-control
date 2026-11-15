@@ -159,6 +159,7 @@ func (h *AgentHandler) registerRoutes() {
 	h.mux.HandleFunc("/api/scripts/history/content", h.handleScriptsHistoryContent)
 	h.mux.HandleFunc("/api/scripts/run", h.handleScriptsRun)
 	h.mux.HandleFunc("/api/scripts/stop", h.handleScriptsStop)
+	h.mux.HandleFunc("/api/scripts/kill", h.handleScriptsKill)
 	h.mux.HandleFunc("/api/scripts/logs", h.handleScriptsLogs)
 	h.mux.HandleFunc("/api/scripts/logs/stream", h.handleScriptsLogsStream)
 	h.mux.HandleFunc("/api/scripts/ws", h.handleScriptsWS)
@@ -526,6 +527,18 @@ func (h *AgentHandler) handleScriptsStop(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Скрипт остановлен", "id": body.ID})
+}
+
+func (h *AgentHandler) handleScriptsKill(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.ID == "" {
+		body.ID = "main"
+	}
+	_ = h.scripts.KillScript(body.ID)
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Процесс принудительно убит (SIGKILL)", "id": body.ID})
 }
 
 func (h *AgentHandler) handleDBTableData(w http.ResponseWriter, r *http.Request) {

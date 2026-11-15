@@ -4,12 +4,14 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements DownloadListener {
     public static final int FILE_CHOOSER_REQUEST = 1001;
     private WebView webView;
     @SuppressWarnings("rawtypes")
@@ -33,7 +35,36 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new NodeChromeClient(this));
+        webView.setDownloadListener(this);
+        webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+        openUrlInSystem(url);
+    }
+
+    public void openUrlInSystem(String url) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ignored) {}
+    }
+
+    public static class WebAppInterface {
+        private final MainActivity activity;
+
+        public WebAppInterface(MainActivity activity) {
+            this.activity = activity;
+        }
+
+        @JavascriptInterface
+        public void downloadAndInstallApk(String url) {
+            activity.openUrlInSystem(url);
+        }
     }
 
     @SuppressWarnings("rawtypes")

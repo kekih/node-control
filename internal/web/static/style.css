@@ -1041,6 +1041,131 @@ textarea.form-control {
   100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
 }
 
+/* ================= CRITICAL SCRIPT KILL BUTTON ================= */
+.btn-script-kill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 18px;
+  border-radius: var(--btn-radius);
+  cursor: pointer;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.btn-script-kill:hover {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-script-kill:active {
+  transform: translateY(0);
+}
+
+/* ================= OVER-THE-AIR (OTA) GITHUB UPDATER ================= */
+.ota-update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(99, 102, 241, 0.25));
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 9999px;
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.2);
+}
+
+.ota-update-badge:hover {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(99, 102, 241, 0.4));
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+}
+
+.ota-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 10px #38bdf8;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.update-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 6px;
+}
+
+.ver-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ver-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.ver-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-main);
+  font-family: monospace;
+}
+
+.ver-val.highlight {
+  color: var(--cyan-primary);
+}
+
+.ver-arrow {
+  font-size: 20px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.update-changelog-box {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ================= SCRIPTS HISTORY & SNAPSHOTS ================= */
 .script-history-box {
   background: var(--bg-card);
@@ -1718,11 +1843,18 @@ textarea.form-control {
   }
 
   .btn-script-toggle {
-    width: 100% !important;
+    flex: 1 !important;
     min-width: unset !important;
     height: 46px !important;
-    font-size: 15px !important;
-    margin-top: 10px;
+    font-size: 14px !important;
+    margin-top: 0 !important;
+  }
+
+  .btn-script-kill {
+    height: 46px !important;
+    padding: 0 16px !important;
+    font-size: 14px !important;
+    margin-top: 0 !important;
   }
 
   .log-panel {

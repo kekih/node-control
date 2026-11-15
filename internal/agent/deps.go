@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -94,37 +95,43 @@ var nodeBuiltIns = map[string]bool{
 	"zlib": true, "node:test": true,
 }
 
+// CommandReporter reports active background commands
+type CommandReporter func(*exec.Cmd)
+
 // EnsureDependencies inspects code and installs missing dependencies for python, nodejs, or golang
-func EnsureDependencies(ctx context.Context, lang, code, workDir string, logWriter io.Writer) error {
+func EnsureDependencies(ctx context.Context, lang, code, workDir string, logWriter io.Writer, onCmd CommandReporter) error {
 	switch strings.ToLower(lang) {
 	case "python", "py":
-		return ensurePythonDeps(ctx, code, logWriter)
+		return ensurePythonDeps(ctx, code, logWriter, onCmd)
 	case "nodejs", "node", "javascript", "js":
-		return ensureNodeDeps(ctx, code, workDir, logWriter)
+		return ensureNodeDeps(ctx, code, workDir, logWriter, onCmd)
 	case "golang", "go":
-		return ensureGoDeps(ctx, workDir, logWriter)
+		return ensureGoDeps(ctx, workDir, logWriter, onCmd)
 	}
 	return nil
 }
 
-// findExecutable searches for available binary names
+// findExecutable searches for available binary names or paths
 func findExecutable(names ...string) string {
 	for _, name := range names {
 		if path, err := exec.LookPath(name); err == nil {
 			return path
 		}
+		if _, err := os.Stat(name); err == nil {
+			return name
+		}
 	}
 	return ""
 }
 
-func ensurePythonDeps(ctx context.Context, code string, logWriter io.Writer) error {
-	pythonBin := findExecutable("python3", "python")
+func ensurePythonDeps(ctx context.Context, code string, logWriter io.Writer, onCmd CommandReporter) error {
+	pythonBin := findExecutable("python3", "python", "/usr/bin/python3", "/usr/bin/python", "/usr/local/bin/python3")
 	if pythonBin == "" {
 		fmt.Fprintf(logWriter, "[Node Agent] Предупреждение: python не найден в PATH!\n")
 		return nil
 	}
 
-	pipBin := findExecutable("pip3", "pip")
+	pipBin := findExecutable("pip3", "pip", "/usr/bin/pip3", "/usr/bin/pip", "/usr/local/bin/pip3")
 
 	// Detect packages imported in Python code
 	// Match: import xyz, import xyz.abc, from xyz import ...
@@ -162,6 +169,9 @@ func ensurePythonDeps(ctx context.Context, code string, logWriter io.Writer) err
 
 		fmt.Fprintf(logWriter, "[Node Agent] 📦 Обнаружена отсутствующая зависимость Python '%s'. Установка через pip...\n", pkgName)
 		installCmd := exec.CommandContext(ctx, pipBin, "install", "--quiet", pkgName)
+		if onCmd != nil {
+			onCmd(installCmd)
+		}
 		var outBuf bytes.Buffer
 		installCmd.Stdout = io.MultiWriter(logWriter, &outBuf)
 		installCmd.Stderr = io.MultiWriter(logWriter, &outBuf)
@@ -175,8 +185,8 @@ func ensurePythonDeps(ctx context.Context, code string, logWriter io.Writer) err
 	return nil
 }
 
-func ensureNodeDeps(ctx context.Context, code, workDir string, logWriter io.Writer) error {
-	npmBin := findExecutable("npm")
+func ensureNodeDeps(ctx context.Context, code, workDir string, logWriter io.Writer, onCmd CommandReporter) error {
+	npmBin := findExecutable("npm", "yarn", "pnpm", "/usr/bin/npm", "/usr/local/bin/npm")
 	if npmBin == "" {
 		return nil
 	}
@@ -209,6 +219,9 @@ func ensureNodeDeps(ctx context.Context, code, workDir string, logWriter io.Writ
 	for pkg := range detected {
 		fmt.Fprintf(logWriter, "[Node Agent] 📦 Обнаружен пакет Node.js '%s'. Проверка и установка...\n", pkg)
 		cmd := exec.CommandContext(ctx, npmBin, "install", "--no-audit", "--no-fund", pkg)
+		if onCmd != nil {
+			onCmd(cmd)
+		}
 		cmd.Dir = workDir
 		cmd.Stdout = logWriter
 		cmd.Stderr = logWriter
@@ -221,8 +234,8 @@ func ensureNodeDeps(ctx context.Context, code, workDir string, logWriter io.Writ
 	return nil
 }
 
-func ensureGoDeps(ctx context.Context, workDir string, logWriter io.Writer) error {
-	goBin := findExecutable("go")
+func ensureGoDeps(ctx context.Context, workDir string, logWriter io.Writer, onCmd CommandReporter) error {
+	goBin := findExecutable("go", "/usr/bin/go", "/usr/local/go/bin/go")
 	if goBin == "" {
 		fmt.Fprintf(logWriter, "[Node Agent] go не найден в PATH!\n")
 		return nil
@@ -231,6 +244,9 @@ func ensureGoDeps(ctx context.Context, workDir string, logWriter io.Writer) erro
 	// Run go mod tidy in script directory
 	fmt.Fprintf(logWriter, "[Node Agent] 📦 Обновление модулей Golang (go mod tidy)...\n")
 	cmd := exec.CommandContext(ctx, goBin, "mod", "tidy")
+	if onCmd != nil {
+		onCmd(cmd)
+	}
 	cmd.Dir = workDir
 	cmd.Stdout = logWriter
 	cmd.Stderr = logWriter

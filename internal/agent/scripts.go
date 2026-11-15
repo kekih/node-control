@@ -26,15 +26,16 @@ type ScriptInfo struct {
 
 // RunningJob represents an active or past script execution
 type RunningJob struct {
-	ID        string
-	Language  string
-	Cmd       *exec.Cmd
-	Cancel    context.CancelFunc
-	Status    string
-	StartTime time.Time
-	LogBuffer *bytes.Buffer
-	Listeners []chan string
-	mu        sync.Mutex
+	ID         string
+	Language   string
+	Cmd        *exec.Cmd
+	InstallCmd *exec.Cmd
+	Cancel     context.CancelFunc
+	Status     string
+	StartTime  time.Time
+	LogBuffer  *bytes.Buffer
+	Listeners  []chan string
+	mu         sync.Mutex
 }
 
 func (j *RunningJob) Write(p []byte) (n int, err error) {
@@ -49,6 +50,24 @@ func (j *RunningJob) Write(p []byte) (n int, err error) {
 		}
 	}
 	return len(p), nil
+}
+
+func (j *RunningJob) broadcastStatus(status string) {
+	j.mu.Lock()
+	j.Status = status
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":   "status",
+		"status": status,
+		"id":     j.ID,
+	})
+	msg := string(payload)
+	for _, ch := range j.Listeners {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+	j.mu.Unlock()
 }
 
 func (j *RunningJob) AddListener(ch chan string) {
@@ -282,9 +301,24 @@ func (sm *ScriptManager) ListScripts() []ScriptInfo {
 // RunScript launches the script with auto dependency management
 func (sm *ScriptManager) RunScript(id, lang, content string, autoDeps bool) error {
 	sm.mu.Lock()
-	if existing, ok := sm.jobs[id]; ok && existing.Status == "running" {
-		sm.mu.Unlock()
-		return fmt.Errorf("скрипт '%s' уже запущен", id)
+	if existing, ok := sm.jobs[id]; ok {
+		// If job has a process, check if it's really alive
+		isAlive := false
+		if (existing.Status == "running" || existing.Status == "starting" || existing.Status == "installing_deps") && existing.Cmd != nil && existing.Cmd.Process != nil {
+			isAlive = isProcessAlive(existing.Cmd.Process)
+		}
+		if isAlive {
+			sm.mu.Unlock()
+			return fmt.Errorf("скрипт '%s' уже выполняется (PID %d)", id, existing.Cmd.Process.Pid)
+		}
+		// Stale or dead, cleanup
+		if existing.Cancel != nil {
+			existing.Cancel()
+		}
+		if existing.Cmd != nil {
+			killProcessTree(existing.Cmd)
+		}
+		existing.Status = "stopped"
 	}
 
 	filePath, err := sm.SaveScript(id, lang, content)
@@ -306,111 +340,153 @@ func (sm *ScriptManager) RunScript(id, lang, content string, autoDeps bool) erro
 	sm.mu.Unlock()
 
 	go func() {
-		defer cancel()
+		defer func() {
+			cancel()
+			job.broadcastStatus("stopped")
+		}()
+
 		workDir := filepath.Dir(filePath)
 		fmt.Fprintf(job, "[Node Agent] 🚀 Запуск скрипта '%s' [%s] в %s\n", id, lang, time.Now().Format("15:04:05"))
+		job.broadcastStatus("starting")
 
 		if autoDeps {
-			job.mu.Lock()
-			job.Status = "installing_deps"
-			job.mu.Unlock()
+			job.broadcastStatus("installing_deps")
 			fmt.Fprintf(job, "[Node Agent] 🔍 Анализ зависимостей...\n")
-			_ = EnsureDependencies(ctx, lang, content, workDir, job)
+
+			depCtx, depCancel := context.WithTimeout(ctx, 45*time.Second)
+			_ = EnsureDependencies(depCtx, lang, content, workDir, job, func(c *exec.Cmd) {
+				job.mu.Lock()
+				job.InstallCmd = c
+				job.mu.Unlock()
+			})
+			depCancel()
+
+			job.mu.Lock()
+			job.InstallCmd = nil
+			job.mu.Unlock()
 		}
 
 		var cmd *exec.Cmd
 		switch strings.ToLower(lang) {
 		case "python", "py":
-			pyBin := findExecutable("python3", "python")
+			pyBin := findExecutable("python3", "python", "/usr/bin/python3", "/usr/bin/python", "/usr/local/bin/python3")
 			if pyBin == "" {
-				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: python не установлен на сервере!\n")
-				job.mu.Lock()
-				job.Status = "error"
-				job.mu.Unlock()
+				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: Python не найден в системе!\n")
+				fmt.Fprintf(job, "  👉 Установите python на сервере:\n")
+				fmt.Fprintf(job, "     • Linux: sudo apt update && sudo apt install -y python3 python3-pip\n")
+				fmt.Fprintf(job, "     • Windows: скачайте с python.org\n")
+				job.broadcastStatus("error")
 				return
 			}
-			cmd = exec.CommandContext(ctx, pyBin, "-u", filePath) // -u for unbuffered stdout
+			cmd = exec.CommandContext(ctx, pyBin, "-u", filePath)
+			cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
 		case "nodejs", "node", "javascript", "js":
-			nodeBin := findExecutable("node")
+			nodeBin := findExecutable("node", "nodejs", "/usr/bin/node", "/usr/bin/nodejs", "/usr/local/bin/node")
 			if nodeBin == "" {
-				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: nodejs не установлен на сервере!\n")
-				job.mu.Lock()
-				job.Status = "error"
-				job.mu.Unlock()
+				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: Node.js не найден в системе!\n")
+				fmt.Fprintf(job, "  👉 Установите nodejs на сервере:\n")
+				fmt.Fprintf(job, "     • Linux: sudo apt update && sudo apt install -y nodejs npm\n")
+				job.broadcastStatus("error")
 				return
 			}
 			cmd = exec.CommandContext(ctx, nodeBin, filePath)
 		case "golang", "go":
-			goBin := findExecutable("go")
+			goBin := findExecutable("go", "/usr/bin/go", "/usr/local/go/bin/go")
 			if goBin == "" {
-				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: golang не установлен на сервере!\n")
-				job.mu.Lock()
-				job.Status = "error"
-				job.mu.Unlock()
+				fmt.Fprintf(job, "[Node Agent] ❌ Ошибка: Golang не найден в системе!\n")
+				fmt.Fprintf(job, "  👉 Установите go на сервере:\n")
+				fmt.Fprintf(job, "     • Linux: sudo apt update && sudo apt install -y golang-go\n")
+				job.broadcastStatus("error")
 				return
 			}
 			cmd = exec.CommandContext(ctx, goBin, "run", filepath.Base(filePath))
 		default:
 			fmt.Fprintf(job, "[Node Agent] ❌ Неподдерживаемый язык: %s\n", lang)
-			job.mu.Lock()
-			job.Status = "error"
-			job.mu.Unlock()
+			job.broadcastStatus("error")
 			return
 		}
 
+		setProcessGroup(cmd)
 		cmd.Dir = workDir
 		cmd.Stdout = job
 		cmd.Stderr = job
 
 		job.mu.Lock()
 		job.Cmd = cmd
-		job.Status = "running"
 		job.mu.Unlock()
 
 		if err := cmd.Start(); err != nil {
 			fmt.Fprintf(job, "[Node Agent] ❌ Ошибка запуска процесса: %v\n", err)
-			job.mu.Lock()
-			job.Status = "error"
-			job.mu.Unlock()
+			job.broadcastStatus("error")
 			return
 		}
 
+		job.broadcastStatus("running")
 		fmt.Fprintf(job, "[Node Agent] 🟢 Процесс запущен (PID %d)\n", cmd.Process.Pid)
 
 		exitErr := cmd.Wait()
-		job.mu.Lock()
 		if exitErr != nil {
-			fmt.Fprintf(job, "[Node Agent] 🛑 Процесс завершился с ошибкой: %v\n", exitErr)
-			job.Status = "stopped"
+			fmt.Fprintf(job, "[Node Agent] 🛑 Процесс завершился: %v\n", exitErr)
 		} else {
 			fmt.Fprintf(job, "[Node Agent] 🏁 Процесс успешно завершен (код 0)\n")
-			job.Status = "stopped"
 		}
-		job.mu.Unlock()
 	}()
 
 	return nil
 }
 
-// StopScript stops a running script
+// StopScript stops a running script gracefully
 func (sm *ScriptManager) StopScript(id string) error {
 	sm.mu.Lock()
 	job, ok := sm.jobs[id]
 	sm.mu.Unlock()
 
-	if !ok || job.Status != "running" && job.Status != "starting" && job.Status != "installing_deps" {
-		return fmt.Errorf("скрипт '%s' не запущен", id)
+	if !ok || job == nil {
+		return nil
 	}
 
 	fmt.Fprintf(job, "\n[Node Agent] ⚠️ Остановка процесса по запросу пользователя...\n")
-	job.Cancel()
-	if job.Cmd != nil && job.Cmd.Process != nil {
-		_ = job.Cmd.Process.Kill()
+	if job.Cancel != nil {
+		job.Cancel()
 	}
 
-	job.mu.Lock()
-	job.Status = "stopped"
-	job.mu.Unlock()
+	if job.InstallCmd != nil && job.InstallCmd.Process != nil {
+		killProcessTree(job.InstallCmd)
+	}
+
+	if job.Cmd != nil && job.Cmd.Process != nil {
+		killProcessTree(job.Cmd)
+	}
+
+	job.broadcastStatus("stopped")
+	return nil
+}
+
+// KillScript performs critical force kill (SIGKILL) on process and all child processes
+func (sm *ScriptManager) KillScript(id string) error {
+	sm.mu.Lock()
+	job, ok := sm.jobs[id]
+	sm.mu.Unlock()
+
+	if !ok || job == nil {
+		return nil
+	}
+
+	fmt.Fprintf(job, "\n[Node Agent] ⚡ КРИТИЧЕСКАЯ ОСТАНОВКА: Процесс и все дочерние задачи принудительно убиты (SIGKILL)\n")
+
+	if job.Cancel != nil {
+		job.Cancel()
+	}
+
+	if job.InstallCmd != nil && job.InstallCmd.Process != nil {
+		killProcessTree(job.InstallCmd)
+	}
+
+	if job.Cmd != nil && job.Cmd.Process != nil {
+		killProcessTree(job.Cmd)
+	}
+
+	job.broadcastStatus("stopped")
 	return nil
 }
 

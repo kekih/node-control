@@ -28,6 +28,12 @@
         </div>
 
         <div class="header-actions">
+          <!-- OTA Update Badge (GitHub Releases) -->
+          <button id="headerUpdateBadge" class="ota-update-badge" onclick="openUpdateModal()" style="display: none;" title="Доступно обновление по воздуху с GitHub">
+            <span class="ota-pulse-dot"></span>
+            <span class="ota-badge-text">🚀 Обновление <span id="updateVersionText"></span></span>
+          </button>
+
           <!-- Top Spinner Indicator (Appears when no connection for 10s) -->
           <div id="topSpinner" class="top-spinner-container" title="Поиск подключения к серверу...">
             <div class="cyan-spinner-ring"></div>
@@ -494,6 +500,14 @@
                 </svg>
                 <span id="btnScriptToggleText">Запустить .py</span>
               </button>
+
+              <!-- CRITICAL STOP / SIGKILL BUTTON -->
+              <button id="btnScriptKill" class="btn-script-kill" onclick="killScriptExecution()" title="Критическая остановка процесса (SIGKILL / Force Kill)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                </svg>
+                <span>Убить</span>
+              </button>
             </div>
 
             <!-- Language Selector -->
@@ -836,6 +850,73 @@
             <div class="theme-option-sub">Неоновый фиолетовый</div>
           </div>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Over-The-Air Update (GitHub) -->
+  <div id="modalUpdate" class="modal-overlay" onclick="closeModalOnBackdrop(event, 'modalUpdate')">
+    <div class="modal-sheet" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 34px; height: 34px; border-radius: 9px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: var(--cyan-primary);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="font-size: 17px; margin: 0;">Обновление по воздуху (OTA)</h2>
+            <div style="font-size: 12px; color: var(--text-muted);">Источник: GitHub Releases (kekih/node-control)</div>
+          </div>
+        </div>
+        <button class="icon-btn" onclick="closeModal('modalUpdate')">✕</button>
+      </div>
+
+      <div class="update-modal-body" style="padding-top: 14px;">
+        <div class="update-version-row">
+          <div class="ver-col">
+            <span class="ver-label">Текущая версия</span>
+            <span id="updateCurrentVer" class="ver-val">v1.0.3</span>
+          </div>
+          <div class="ver-arrow">→</div>
+          <div class="ver-col">
+            <span class="ver-label">Новая версия</span>
+            <span id="updateLatestVer" class="ver-val highlight">v1.0.4</span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label class="form-label">Что нового в обновлении:</label>
+          <div id="updateChangelog" class="update-changelog-box">Загрузка информации о релизе...</div>
+        </div>
+
+        <div id="updateProgressContainer" style="display: none; margin-top: 16px;">
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+            <span id="updateStatusText">Скачивание обновления...</span>
+            <span id="updateProgressPercent">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div id="updateProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div id="updateErrorBox" class="alert-error" style="display: none; margin-top: 12px; font-size: 13px;"></div>
+
+        <div style="display: flex; gap: 12px; margin-top: 22px;">
+          <button id="btnApplyUpdate" class="btn-primary" style="flex: 1;" onclick="startOTAUpdate()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span id="btnApplyUpdateText">Обновить сейчас</span>
+          </button>
+          <a id="btnManualUpdateLink" href="https://github.com/kekih/node-control/releases/latest" target="_blank" class="btn-outline" style="text-decoration: none; display: flex; align-items: center; justify-content: center; padding: 0 16px;">
+            GitHub
+          </a>
+        </div>
       </div>
     </div>
   </div>

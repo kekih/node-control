@@ -16,12 +16,12 @@ const (
 	serverURL = "http://home-server:3000"
 	repoOwner = "Leuteg"
 	repoName  = "node-control"
-	tag       = "1.0.3"
-	title     = "v1.0.3 - Нативные GUI приложения (Windows & Linux) и фикс путей"
+	tag       = "1.0.4"
+	title     = "v1.0.4 - Критическая остановка скриптов, исправление запуска и OTA обновления GitHub"
 )
 
 func main() {
-	bodyBytes, err := os.ReadFile("release_notes_103.md")
+	bodyBytes, err := os.ReadFile("release_notes_104.md")
 	if err != nil {
 		panic(err)
 	}
